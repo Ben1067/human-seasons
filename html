@@ -1,0 +1,5237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>The Human Seasons — Animation</title>
+<style>
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: #000;
+    overflow: hidden;
+    font-family: Georgia, 'Times New Roman', serif;
+    color: #fff;
+    user-select: none;
+  }
+  #stage {
+    position: relative;
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+  }
+  canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+  #caption {
+    position: absolute;
+    bottom: 8%;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 82%;
+    text-align: center;
+    font-size: 1.5rem;
+    font-style: italic;
+    letter-spacing: 0.05em;
+    text-shadow: 0 0 24px rgba(0,0,0,0.95), 0 0 6px rgba(0,0,0,1);
+    opacity: 0;
+    transition: opacity 1.6s ease;
+    pointer-events: none;
+    line-height: 1.5;
+  }
+  #caption.show { opacity: 1; }
+  #lineNum {
+    position: absolute;
+    top: 4%;
+    right: 5%;
+    font-size: 0.85rem;
+    opacity: 0.45;
+    letter-spacing: 0.25em;
+    font-variant: small-caps;
+  }
+  #controls {
+    position: absolute;
+    top: 4%;
+    left: 5%;
+    font-size: 0.75rem;
+    opacity: 0.55;
+    letter-spacing: 0.1em;
+  }
+  button {
+    background: rgba(0,0,0,0.3);
+    border: 1px solid rgba(255,255,255,0.35);
+    color: #fff;
+    padding: 7px 14px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 0.75rem;
+    letter-spacing: 0.1em;
+    margin-right: 6px;
+    transition: all 0.25s ease;
+    backdrop-filter: blur(6px);
+  }
+  button:hover {
+    background: rgba(255,255,255,0.15);
+    border-color: rgba(255,255,255,0.7);
+  }
+  #muteBtn { margin-left: 12px; }
+  #finalLines {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2.5vh;
+  text-align: center;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 3s ease;
+  z-index: 100;
+  padding: 0 8vw;
+}
+
+#finalLines.show {
+  opacity: 1;
+}
+
+#finalLines .final-line {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-style: italic;
+  font-size: clamp(1.8rem, 4vw, 3.4rem);
+  line-height: 1.35;
+  color: #1a1a22;
+  letter-spacing: 0.02em;
+  transform: translateY(20px);
+  opacity: 0;
+  transition: transform 2.5s ease, opacity 2.5s ease;
+  text-shadow: 0 0 2px rgba(0,0,0,0.05);
+}
+
+#finalLines.show .final-line {
+  transform: translateY(0);
+  opacity: 1;
+}
+
+#finalLines.show .final-line:nth-child(1) {
+  transition-delay: 0.6s;
+}
+
+#finalLines.show .final-line:nth-child(2) {
+  transition-delay: 1.6s;
+}
+#credits {
+  position: absolute;
+  bottom: 6%;
+  left: 50%;
+  transform: translateX(-50%) translateY(15px);
+  font-family: Georgia, 'Times New Roman', serif;
+  font-style: italic;
+  font-size: clamp(0.9rem, 1.4vw, 1.2rem);
+  letter-spacing: 0.25em;
+  color: rgba(40, 40, 55, 0.7);
+  opacity: 0;
+  transition: opacity 3s ease, transform 3s ease;
+  pointer-events: none;
+  z-index: 101;
+  text-align: center;
+}
+
+#credits.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="scene"></canvas>
+  <div id="caption"></div>
+  <div id="lineNum">I / XIV</div>
+   <div id="finalLines">
+      <div id="credits">
+    Made by Ivan Lukinsky
+  </div>
+    <div class="final-line">Or else he would forego his mortal nature.</div>
+  </div>
+  <div id="controls">
+    <button id="btnPlay">▶ Play</button>
+    <button id="btnNext">⏭ Next</button>
+    <button id="btnReset">⟲ Reset</button>
+    <button id="muteBtn">🔇 Muted</button>
+  </div>
+</div>
+
+<audio id="track-main" loop preload="auto">
+  <source src="audio/my-music.mp3" type="audio/mpeg">
+</audio>
+
+<audio id="track-wolves" preload="auto">
+  <source src="audio/wolves.mp3" type="audio/mpeg">
+  <audio id="track-rain" loop preload="auto">
+  <source src="audio/rain.mp3" type="audio/mpeg">
+</audio>
+<audio id="track-nightingale" preload="auto">
+  <source src="audio/nightingale.mp3" type="audio/mpeg">
+</audio>
+<audio id="track-sea" loop preload="auto">
+  <source src="audio/sea.mp3" type="audio/mpeg">
+</audio>
+</audio>
+
+<script>
+/* ============================================================
+   THE HUMAN SEASONS
+   A cinematic canvas animation based on John Keats's sonnet.
+   The character walks endlessly; the world transforms through
+   fourteen lines — each line introduces a new symbolic object
+   that personifies the season's weather and inner state.
+   ============================================================ */
+
+const canvas   = document.getElementById('scene');
+const ctx      = canvas.getContext('2d');
+const captionEl = document.getElementById('caption');
+const lineNumEl = document.getElementById('lineNum');
+const finalLinesEl = document.getElementById('finalLines');
+const creditsEl = document.getElementById('credits');
+
+/* ---------- CANVAS RESIZE ---------- */
+let W, H, DPR;
+function resize() {
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  W = canvas.width  = window.innerWidth  * DPR;
+  H = canvas.height = window.innerHeight * DPR;
+  canvas.style.width  = window.innerWidth  + 'px';
+  canvas.style.height = window.innerHeight + 'px';
+}
+resize();
+window.addEventListener('resize', resize);
+
+/* ---------- THE FOURTEEN LINES ---------- */
+const LINES = [
+  { en: "Four Seasons fill the measure of the year;",
+    ru: "Четыре времени года наполняют меру года;",
+    season: "prologue", dur: 9,  object: "dial" },
+
+  { en: "There are four seasons in the mind of man:",
+  ru: "Есть четыре времени года в уме человека:",
+  season: "prologue", dur: 10, object: "thoughts" },
+
+  { en: "He has his lusty Spring, when fancy clear",
+    ru: "У него есть его цветущая Весна, когда ясная фантазия",
+    season: "spring", dur: 14, object: "blossom" },
+
+  { en: "Takes in all beauty with an easy span:",
+    ru: "Впитывает всю красоту с лёгким охватом:",
+    season: "spring", dur: 14, object: "butterflies" },
+
+  { en: "He has his Summer, when luxuriously",
+    ru: "У него есть его Лето, когда роскошно",
+    season: "summer", dur: 15, object: "summerFeast" },
+
+  { en: "Spring's honied cud of youthful thought he loves",
+    ru: "Весеннюю медовую жвачку юной мысли он любит",
+    season: "summer", dur: 14, object: "honeyCud" },
+
+  { en: "To ruminate, and by such dreaming high",
+    ru: "Пережёвывать, и таким мечтанием высоко",
+    season: "summer", dur: 14, object: "cloudDreams" },
+
+  { en: "Is nearest unto heaven: quiet coves",
+    ru: "Ближе всего к небесам: тихие бухты",
+    season: "summer", dur: 14, object: "cliffCove" },
+
+  { en: "His soul has in its Autumn, when his wings",
+    ru: "Его душа имеет в своей Осени, когда свои крылья",
+    season: "autumn", dur: 14, object: "wings" },
+
+  { en: "He furleth close; contented so to look",
+    ru: "Он складывает плотно; довольный так смотреть",
+    season: "autumn", dur: 14, object: "observer" },
+
+  { en: "On mists in idleness — to let fair things",
+    ru: "На туманы в праздности — позволять прекрасным вещам",
+    season: "autumn", dur: 14, object: "mistPassing" },
+
+  { en: "Pass by unheeded as a threshold brook.",
+    ru: "Проходить незамеченными, как ручей у порога.",
+    season: "autumn", dur: 14, object: "thresholdBrook" },
+
+  { en: "He has his Winter too of pale misfeature,",
+    ru: "У него есть его Зима тоже бледного уродства,",
+    season: "winter", dur: 16, object: "wraith" },
+
+  { en: "Or else he would forego his mortal nature.",
+    ru: "Или иначе он отрёкся бы от своей смертной природы.",
+    season: "final", dur: 20, object: "dissolution" }
+];
+
+/* ---------- SEASON PALETTES ---------- */
+const PALETTES = {
+  prologue: {
+    sky1:   [12, 12, 22],
+    sky2:   [40, 42, 60],
+    ground: [18, 18, 28],
+    accent: [170, 180, 200],
+    fog:    [28, 30, 48]
+  },
+  spring: {
+    sky1:   [170, 215, 255],
+    sky2:   [255, 235, 245],
+    ground: [120, 195, 130],
+    accent: [255, 175, 210],
+    fog:    [235, 245, 255]
+  },
+  summer: {
+    sky1:   [255, 200, 110],
+    sky2:   [255, 140, 70],
+    ground: [90, 150, 70],
+    accent: [255, 230, 130],
+    fog:    [255, 220, 170]
+  },
+  autumn: {
+    sky1:   [240, 145, 85],
+    sky2:   [130, 70, 55],
+    ground: [120, 70, 45],
+    accent: [210, 95, 55],
+    fog:    [230, 190, 115]
+  },
+  winter: {
+    sky1:   [30, 34, 48],
+    sky2:   [60, 66, 84],
+    ground: [180, 185, 200],
+    accent: [140, 155, 190],
+    fog:    [90, 100, 125]
+  },
+  final: {
+    sky1:   [255, 255, 255],
+    sky2:   [225, 225, 245],
+    ground: [240, 242, 252],
+    accent: [255, 255, 255],
+    fog:    [255, 255, 255]
+  }
+};
+
+/* ---------- STATE ---------- */
+  
+const state = {
+    // THRESHOLD BROOK — rain, leaves on water, reflection
+  brookRainDensity: 0,    // 0..1 плотность дождя
+  brookAlpha: 0,          // прозрачность ручья
+  brookCameraDip: 0,      // 0..1 насколько камера опущена к воде
+   // MIST PASSING — drifting images in fog
+  mistDensity: 0,        // 0..1 плотность тумана
+  mistPassingAlpha: 0,   // прозрачность проплывающих образов
+  mistPassingPhase: 0,   // фаза движения
+
+    // HONEY CUD — sitting, reminiscing
+  cudSitProgress: 0,     // 0 = стоит, 1 = сидит под деревом
+  cudMemoryAlpha: 0,     // прозрачность воспоминаний
+  cudMemoryPhase: 0,     // текущая фаза (для смены кадров)
+    // SOUL WINGS — appear, spread, fold, vanish
+  soulWingsAlpha: 0,        // 0..1 общая прозрачность
+  soulWingsSpread: 0,       // 0 = сложены, 1 = раскрыты
+  soulWingsVanishing: 0,    // 0..1 невидимость крыльев (растворение)
+    // CLIFF COVE — sitting on the edge
+  sittingProgress: 0,     // 0 = стоит, 1 = сидит
+  coveRevealProgress: 0,  // раскрытие неба с бухтой
+  calmAlpha: 0,           // прозрачность моря и скал
+    // HONEY JARS around the knight
+  honeyJarAlpha: 0,
+   // CLOUD DREAMS — head looks up, camera rises
+  headTilt: 0,          // 0 = обычно, 1 = смотрит вверх
+  cloudDreamAlpha: 0,   // прозрачность облаков-мечтаний
+  cloudDreamStage: 0,   // фаза анимации 0..1
+  
+    // SUMMER FEAST — knight lies in the grass
+  lieDownProgress: 0,   // 0 = стоит, 1 = лежит
+  feastAlpha: 0,        // прозрачность стола с едой
+  highGrass: 0,         // сколько высокой травы
+    // PROLOGUE — camera zoom + thoughts
+  cameraZoom: 1,       // 1 = обычно, >1 = приближено к голове
+  cameraOffX: 0,       // смещение камеры по X
+  cameraOffY: 0,       // смещение камеры по Y
+    // PROLOGUE — dial intro
+  dialAlpha: 0,
+  dialAngle: 0,
+  dialActive: true,
+  firstStep: false,
+  line: 0,
+  t: 0,
+  playing: false,
+  lastTime: 0,
+  characterBob: 0,
+  characterLean: 0,
+  characterAlpha: 1,
+  wingsFold: 0,
+  wingsAlpha: 0,
+  fogAlpha: 0,
+  vignette: 0.55,
+
+  // particle pools
+  flowers: [],
+  leaves: [],
+  snow: [],
+  birds: [],
+  embers: [],
+  butterflies: [],
+  honeyDrops: [],
+  dreamClouds: [],
+  mistPuffs: [],
+  ash: [],
+
+  // symbolic objects
+  objectAlpha: 0,
+  objectScale: 0.6,
+  objectPulse: 0,
+
+  // transition
+  transitionFlash: 0
+};
+
+/* ---------- UTILITIES ---------- */
+function lerp(a, b, t) { return a + (b - a) * t; }
+function lerpColor(c1, c2, t) {
+  return [
+    Math.round(lerp(c1[0], c2[0], t)),
+    Math.round(lerp(c1[1], c2[1], t)),
+    Math.round(lerp(c1[2], c2[2], t))
+  ];
+}
+function rgba(c, a = 1) { return `rgba(${c[0]},${c[1]},${c[2]},${a})`; }
+function rand(a, b)     { return a + Math.random() * (b - a); }
+function randInt(a, b)  { return Math.floor(rand(a, b + 1)); }
+function pick(arr)      { return arr[Math.floor(Math.random() * arr.length)]; }
+
+/* ---------- PARTICLE FACTORIES ---------- */
+function makeFlower() {
+  return {
+    x: Math.random() * W,
+     y: H * rand(0.80, 0.96),
+    size: rand(3, 9) * DPR,
+    grow: 0,
+    hue: rand(300, 360),
+    sway: rand(0, Math.PI * 2)
+  };
+}
+function makeLeaf() {
+  return {
+    x: Math.random() * W,
+    y: Math.random() * H,
+    vx: rand(-35, 35),
+    vy: rand(18, 55),
+    rot: rand(0, Math.PI * 2),
+    vr: rand(-2.5, 2.5),
+    size: rand(7, 16) * DPR,
+    hue: rand(15, 45)
+  };
+}
+function makeSnow() {
+  return {
+    x: Math.random() * W,
+    y: Math.random() * H,
+    vx: rand(-15, 15),
+    vy: rand(20, 55),
+    size: rand(1, 3.5) * DPR,
+    alpha: rand(0.4, 1)
+  };
+}
+function makeBird() {
+  return {
+    x: -60 * DPR,
+    y: H * rand(0.12, 0.42),
+    vx: rand(70, 160) * DPR,
+    phase: rand(0, Math.PI * 2),
+    size: rand(5, 11) * DPR
+  };
+}
+function makeEmber() {
+  return {
+    x: Math.random() * W,
+    y: H * rand(0.5, 0.9),
+    vx: rand(-8, 8),
+    vy: rand(-35, -12),
+    size: rand(1.5, 3.5) * DPR,
+    alpha: rand(0.5, 1),
+    life: rand(1.2, 2.8)
+  };
+}
+function makeButterfly() {
+  return {
+    x: Math.random() * W,
+    y: H * rand(0.35, 0.85),
+    vx: rand(-25, 25),
+    vy: rand(-18, 18),
+    phase: rand(0, Math.PI * 2),
+    size: rand(5, 10) * DPR,
+    hue: rand(280, 340)
+  };
+}
+function makeHoneyDrop() {
+  return {
+    x: Math.random() * W,
+    y: rand(0, H * 0.4),
+    vy: rand(15, 35),
+    size: rand(3, 7) * DPR,
+    alpha: rand(0.4, 0.9)
+  };
+}
+function makeDreamCloud() {
+  return {
+    x: Math.random() * W,
+    y: H * rand(0.08, 0.35),
+    vx: rand(-12, 12),
+    size: rand(30, 80) * DPR,
+    alpha: rand(0.15, 0.4),
+    hue: rand(200, 260)
+  };
+}
+function makeMistPuff() {
+  return {
+    x: Math.random() * W,
+    y: H * rand(0.45, 0.9),
+    vx: rand(-18, 18),
+    vy: rand(-6, 6),
+    size: rand(40, 120) * DPR,
+    alpha: rand(0.08, 0.22)
+  };
+}
+function makeAsh() {
+  return {
+    x: Math.random() * W,
+    y: H * rand(0.3, 0.95),
+    vx: rand(-6, 6),
+    vy: rand(-20, -6),
+    size: rand(1, 2.5) * DPR,
+    alpha: rand(0.3, 0.8),
+    life: rand(2, 5)
+  };
+}
+
+/* ---------- SEASON PARTICLE INIT ---------- */
+function initSeason(season, lineObj) {
+    if (lineObj && lineObj.object === 'honeyCud') {
+    state.cudSitProgress = 0;
+    state.cudMemoryAlpha = 0;
+    state.cudMemoryPhase = 0;
+  }
+    if (lineObj && lineObj.object === 'cloudDreams') {
+    state.headTilt = 0;
+    state.cloudDreamAlpha = 0;
+    state.cloudDreamStage = 0;
+  }
+    if (lineObj && lineObj.object === 'mistPassing') {
+    state.mistDensity = 0;
+    state.mistPassingAlpha = 0;
+    state.mistPassingPhase = 0;
+  }
+    if (lineObj && lineObj.object === 'thresholdBrook') {
+    state.brookRainDensity = 0;
+    state.brookAlpha = 0;
+    state.brookCameraDip = 0;
+  }
+    if (lineObj && lineObj.object === 'cliffCove') {
+    state.sittingProgress = 0;
+    state.coveRevealProgress = 0;
+    state.calmAlpha = 0;
+  }
+    if (lineObj && lineObj.object === 'wings') {
+    state.soulWingsAlpha = 0;
+    state.soulWingsSpread = 0;
+    state.soulWingsVanishing = 0;
+  }
+    if (lineObj && lineObj.object === 'honeyJars') {
+    state.honeyJarAlpha = 0;
+  }
+    if (lineObj && lineObj.object === 'dial') {
+      state.cameraZoom = 1;
+    state.cameraOffX = 0;
+    state.cameraOffY = 0;
+    state.dialAlpha = 0;
+    state.dialAngle = 0;
+    state.dialActive = true;
+    state.firstStep = false;
+  }
+  state.flowers    = [];
+  state.leaves     = [];
+  state.snow       = [];
+  state.birds      = [];
+  state.embers     = [];
+  state.butterflies = [];
+  state.honeyDrops = [];
+  state.dreamClouds = [];
+  state.mistPuffs  = [];
+  state.ash        = [];
+
+  state.objectAlpha = 0;
+  state.objectScale = 0.6;
+  state.objectPulse = 0;
+  state.transitionFlash = 1;
+
+  if (season === 'spring') {
+    for (let i = 0; i < 55; i++) state.flowers.push(makeFlower());
+    for (let i = 0; i < 9;  i++) state.birds.push(makeBird());
+  }
+  if (season === 'summer') {
+    for (let i = 0; i < 28; i++) state.flowers.push(makeFlower());
+    for (let i = 0; i < 14; i++) state.birds.push(makeBird());
+    for (let i = 0; i < 40; i++) state.embers.push(makeEmber());
+  }
+  if (season === 'autumn') {
+    for (let i = 0; i < 70; i++) state.leaves.push(makeLeaf());
+    for (let i = 0; i < 30; i++) state.mistPuffs.push(makeMistPuff());
+  }
+  if (season === 'winter') {
+    for (let i = 0; i < 150; i++) state.snow.push(makeSnow());
+    for (let i = 0; i < 80;  i++) state.mistPuffs.push(makeMistPuff());
+    for (let i = 0; i < 25;  i++) state.ash.push(makeAsh());
+  }
+  if (season === 'final') {
+    for (let i = 0; i < 90; i++) state.snow.push(makeSnow());
+  }
+  if (season === 'prologue') {
+    for (let i = 0; i < 20; i++) {
+      const s = makeSnow();
+      s.y = Math.random() * H;
+      state.snow.push(s);
+    }
+  }
+}
+
+/* ============================================================
+   WALK CYCLE — realistic biped gait
+   Phase 0..2π = one full cycle (2 steps).
+   Each leg: stance (60%) → swing (40%).
+   Angles in radians, +x = forward (character faces right).
+   ============================================================ */
+function getWalkCycle(phase) {
+  const TAU = Math.PI * 2;
+  const t   = ((phase % TAU) + TAU) % TAU / TAU; // 0..1
+
+  const STANCE = 0.6; // 60% on ground
+
+  function legAt(p) {
+    p = ((p % 1) + 1) % 1;
+    let hip, knee, ankle, heelLift;
+
+    if (p < STANCE) {
+      // ---- STANCE: foot planted, body passes over it ----
+      const s = p / STANCE; // 0..1
+      // hip sweeps from front (-0.45) to back (+0.38)
+      hip  = lerp(-0.45, 0.38, s);
+      // knee slightly bent at heel-strike, straight mid, then bends for toe-off
+      knee = lerp(0.10, 0.02, Math.min(s * 1.4, 1))
+             + Math.max(0, (s - 0.7) / 0.3) * 0.35;
+      // ankle: toes up at strike → flat → toes down at toe-off
+      ankle = lerp(-0.18, 0.45, s * s);
+      heelLift = Math.max(0, (s - 0.75) / 0.25);
+    } else {
+      // ---- SWING: foot lifts, bends, comes forward ----
+      const s = (p - STANCE) / (1 - STANCE); // 0..1
+      // hip swings from back (+0.38) to front (-0.45)
+      hip  = lerp(0.38, -0.45, s);
+      // knee bends hard at mid-swing (peak lift)
+      const bend = Math.sin(s * Math.PI); // 0..1..0
+      knee = 0.05 + bend * 1.25;
+      // ankle returns to neutral
+      ankle = lerp(0.45, -0.18, s);
+      heelLift = 0;
+    }
+    return { hip, knee, ankle, heelLift };
+  }
+
+  const L = legAt(t);
+  const R = legAt(t + 0.5);
+  // если рыцарь сидит под деревом — ноги свешены вниз
+if (state.cudSitProgress > 0.5) {
+  const blend = state.cudSitProgress;
+  L.hip  = lerp(L.hip,  -0.45, blend);
+  R.hip  = lerp(R.hip,  -0.45, blend);
+  L.knee = lerp(L.knee,  0.85, blend);
+  R.knee = lerp(R.knee,  0.85, blend);
+  L.ankle = lerp(L.ankle, 0.3, blend);
+  R.ankle = lerp(R.ankle, 0.3, blend);
+}
+  // если рыцарь сидит — ноги свешены вниз
+if (state.sittingProgress > 0.5) {
+  const sitBlend = state.sittingProgress;
+  // ноги почти вертикально вниз, слегка вперёд
+  L.hip  = lerp(L.hip,  -0.55, sitBlend);
+  R.hip  = lerp(R.hip,  -0.55, sitBlend);
+  L.knee = lerp(L.knee,  0.9,  sitBlend);   // колени согнуты
+  R.knee = lerp(R.knee,  0.9,  sitBlend);
+  L.ankle = lerp(L.ankle, 0.3, sitBlend);
+  R.ankle = lerp(R.ankle, 0.3, sitBlend);
+}
+
+  // body bob: 2 peaks per cycle (up on mid-stance)
+  const bobY = (Math.sin(phase * 2 - Math.PI / 2) * 0.5 + 0.5) * -1.4;
+
+  // side sway: weight shifts onto planted foot
+  const sideSway = Math.sin(phase) * 1.1;
+
+  // torso tilt: subtle counter-rotation
+  const bodyTilt = Math.sin(phase * 2) * 0.012;
+
+  // hips rotate opposite to shoulders (natural counter-rotation)
+  const hipTwist      = Math.sin(phase) * 0.13;
+  const shoulderTwist = -hipTwist * 0.85;
+
+  // arm swing phases are opposite to same-side leg
+  // left arm follows right leg's phase, right arm follows left leg's
+  const armL = -Math.sin(phase) * 0.05;
+  const armR =  Math.sin(phase) * 0.20;
+
+  return { L, R, bobY, sideSway, bodyTilt, hipTwist, shoulderTwist, armL, armR };
+}
+
+/* ============================================================
+   DRAW LEG — thigh + shin + sabaton
+   Colors: { armorDark, armorMid, armorLight, armorHi, boot, bootBuckle }
+   ============================================================ */
+function drawLeg(cycleLeg, baseX, scale, colors) {
+  const { hip, knee, ankle } = cycleLeg;
+  const { armorDark, armorMid, armorLight, armorHi, boot, bootBuckle } = colors;
+
+  ctx.save();
+  ctx.translate(baseX, 0);
+  ctx.rotate(hip);
+
+  // -------- THIGH --------
+  const thighLen = 26 * scale;
+  const thighTopW = 6 * scale;
+  const thighBotW = 5 * scale;
+  ctx.beginPath();
+  ctx.moveTo(-thighTopW, 0);
+  ctx.lineTo( thighTopW, 0);
+  ctx.lineTo( thighBotW, thighLen);
+  ctx.lineTo(-thighBotW, thighLen);
+  ctx.closePath();
+  const thighGrad = ctx.createLinearGradient(-thighTopW, 0, thighTopW, 0);
+  thighGrad.addColorStop(0,    armorDark);
+  thighGrad.addColorStop(0.35, armorMid);
+  thighGrad.addColorStop(0.72, armorLight);
+  thighGrad.addColorStop(1,    armorDark);
+  ctx.fillStyle = thighGrad;
+  ctx.fill();
+  // thigh highlight
+  ctx.strokeStyle = armorHi;
+  ctx.lineWidth = 0.7 * scale;
+  ctx.beginPath();
+  ctx.moveTo( thighTopW * 0.5, 2 * scale);
+  ctx.lineTo( thighBotW * 0.5, thighLen - 2 * scale);
+  ctx.stroke();
+
+  // -------- KNEE --------
+  ctx.save();
+  ctx.translate(0, thighLen);
+  ctx.rotate(knee);
+  // knee cop
+  const kneeR = 4.4 * scale;
+  const kneeGrad = ctx.createRadialGradient(-1.5 * scale, -1.5 * scale, 0, 0, 0, kneeR);
+  kneeGrad.addColorStop(0,   armorHi);
+  kneeGrad.addColorStop(0.55,armorLight);
+  kneeGrad.addColorStop(1,   armorDark);
+  ctx.fillStyle = kneeGrad;
+  ctx.beginPath();
+  ctx.arc(0, 0, kneeR, 0, Math.PI * 2);
+  ctx.fill();
+  // knee rivet
+  ctx.fillStyle = bootBuckle;
+  ctx.beginPath();
+  ctx.arc(0, 0, 0.9 * scale, 0, Math.PI * 2);
+  ctx.fill();
+
+  // -------- SHIN (greave) --------
+  const shinLen = 28 * scale;
+  const shinTopW = 4.5 * scale;
+  const shinBotW = 3.8 * scale;
+  ctx.beginPath();
+  ctx.moveTo(-shinTopW, 0);
+  ctx.lineTo( shinTopW, 0);
+  ctx.lineTo( shinBotW, shinLen);
+  ctx.lineTo(-shinBotW, shinLen);
+  ctx.closePath();
+  const shinGrad = ctx.createLinearGradient(-shinTopW, 0, shinTopW, 0);
+  shinGrad.addColorStop(0,    armorDark);
+  shinGrad.addColorStop(0.4,  armorMid);
+  shinGrad.addColorStop(0.8,  armorHi);
+  shinGrad.addColorStop(1,    armorDark);
+  ctx.fillStyle = shinGrad;
+  ctx.fill();
+  // greave ridge
+  ctx.strokeStyle = armorHi;
+  ctx.lineWidth = 0.6 * scale;
+  ctx.beginPath();
+  ctx.moveTo( shinTopW * 0.4, 2 * scale);
+  ctx.lineTo( shinBotW * 0.4, shinLen - 2 * scale);
+  ctx.stroke();
+  // greave rivets
+  ctx.fillStyle = armorDark;
+  for (let i = 1; i <= 3; i++) {
+    const ry = (i / 4) * shinLen;
+    ctx.beginPath();
+    ctx.arc(-shinTopW * 0.6, ry, 0.55 * scale, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // -------- FOOT / SABATON --------
+  ctx.save();
+  ctx.translate(0, shinLen);
+  ctx.rotate(ankle);
+  // ankle joint
+  ctx.fillStyle = armorMid;
+  ctx.beginPath();
+  ctx.arc(0, 0, 2.4 * scale, 0, Math.PI * 2);
+  ctx.fill();
+  // sabaton: pointed toe, heel
+  ctx.beginPath();
+  ctx.moveTo(-3 * scale, -1 * scale);
+  ctx.quadraticCurveTo(-5 * scale, 2 * scale, -3 * scale, 4 * scale);
+  ctx.lineTo(2 * scale, 4 * scale);
+  ctx.quadraticCurveTo(7 * scale, 4 * scale, 9.5 * scale, 2 * scale);
+  ctx.lineTo(9.5 * scale, 0);
+  ctx.lineTo(3.5 * scale, 0);
+  ctx.quadraticCurveTo(1.5 * scale, -1.8 * scale, -3 * scale, -1 * scale);
+  ctx.closePath();
+  const bootGrad = ctx.createLinearGradient(-5 * scale, 0, 9.5 * scale, 4 * scale);
+  bootGrad.addColorStop(0,   armorDark);
+  bootGrad.addColorStop(0.55,armorMid);
+  bootGrad.addColorStop(1,   boot);
+  ctx.fillStyle = bootGrad;
+  ctx.fill();
+  // toe plate seam
+  ctx.strokeStyle = armorHi;
+  ctx.lineWidth = 0.55 * scale;
+  ctx.beginPath();
+  ctx.moveTo(3.5 * scale, 0);
+  ctx.lineTo(3.5 * scale, 4 * scale);
+  ctx.stroke();
+  // heel block
+  ctx.fillStyle = boot;
+  ctx.fillRect(-4 * scale, 2 * scale, 2.5 * scale, 2.5 * scale);
+  // buckle
+  ctx.fillStyle = bootBuckle;
+  ctx.beginPath();
+  ctx.arc(0.5 * scale, 2.5 * scale, 0.9 * scale, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore(); // foot
+
+  ctx.restore(); // knee
+  ctx.restore(); // hip
+}
+
+/* ============================================================
+   DRAW ARM — anatomically natural
+   Upper arm swings from shoulder, elbow flexes naturally,
+   forearm follows elbow, hand follows forearm.
+   ============================================================ */
+function drawArm(swingAngle, side, scale, colors, isFront) {
+  const { steelDark, steelMid, steelLight, steelHi,
+          goldMid, goldLight, leatherMid } = colors;
+
+  const cArm  = isFront ? steelLight : steelMid;
+  const cArm2 = isFront ? steelMid   : steelDark;
+  const cHi   = isFront ? steelHi    : steelLight;
+  const cHand = isFront ? steelMid   : steelDark;
+
+  // -------- Shoulder position --------
+  // Slight clavicle: when arm swings forward, shoulder lifts a bit
+  const shoulderLift = Math.sin(swingAngle) * 1.5 * scale;
+  ctx.save();
+  ctx.translate(side * 11 * scale, -30 * scale + shoulderLift);
+
+  // -------- UPPER ARM --------
+  // Upper arm pivots at the shoulder. Forward = negative angle (character faces right).
+  // We keep the shoulder swing small; most motion comes from elbow.
+  const shoulderAngle = swingAngle * 0.75;   // upper arm rotates 75% of total
+  ctx.save();
+  ctx.rotate(shoulderAngle);
+
+  const upperLen = 17 * scale;
+  const upperTopW = 4 * scale;
+  const upperBotW = 3.6 * scale;
+
+  ctx.beginPath();
+  ctx.moveTo(-upperTopW, 0);
+  ctx.lineTo( upperTopW, 0);
+  ctx.lineTo( upperBotW, upperLen);
+  ctx.lineTo(-upperBotW, upperLen);
+  ctx.closePath();
+  const upGrad = ctx.createLinearGradient(-upperTopW, 0, upperTopW, upperLen);
+  upGrad.addColorStop(0,    cArm2);
+  upGrad.addColorStop(0.35, cArm);
+  upGrad.addColorStop(0.75, cHi);
+  upGrad.addColorStop(1,    cArm2);
+  ctx.fillStyle = upGrad;
+  ctx.fill();
+
+  // chainmail dots on upper arm
+  ctx.fillStyle = cArm2;
+  for (let i = 0; i < 4; i++) {
+    for (let j = 0; j < 3; j++) {
+      ctx.beginPath();
+      ctx.arc(-2 * scale + j * 2 * scale, 3.5 * scale + i * 3.5 * scale, 0.35 * scale, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  // -------- ELBOW (natural hinge) --------
+  ctx.save();
+  ctx.translate(0, upperLen);
+
+  // Elbow flex depends on direction:
+  // - When the arm swings FORWARD (negative angle), the elbow opens a bit (0.15–0.30)
+  // - When the arm swings BACK (positive angle), the elbow closes (0.55–0.85)
+  //   because the forearm has to "fold" behind the body
+  let elbowFlex;
+  if (swingAngle < 0) {
+    // arm forward → slight bend
+    elbowFlex = 0.22 + (-swingAngle) * 0.15;   // 0.22 to ~0.50
+  } else {
+    // arm back → stronger bend
+    elbowFlex = 0.22 + swingAngle * 0.9;       // 0.22 to ~0.85
+  }
+  elbowFlex = Math.max(0.15, Math.min(1.0, elbowFlex));
+  ctx.rotate(elbowFlex);
+
+  // Elbow cop (rounded armor)
+  const elbowR = 3.2 * scale;
+  const eGrad = ctx.createRadialGradient(-1 * scale, -1 * scale, 0, 0, 0, elbowR);
+  eGrad.addColorStop(0, cHi);
+  eGrad.addColorStop(0.6, cArm);
+  eGrad.addColorStop(1, cArm2);
+  ctx.fillStyle = eGrad;
+  ctx.beginPath();
+  ctx.arc(0, 0, elbowR, 0, Math.PI * 2);
+  ctx.fill();
+  // rivet
+  ctx.fillStyle = goldMid;
+  ctx.beginPath();
+  ctx.arc(0, 0, 0.7 * scale, 0, Math.PI * 2);
+  ctx.fill();
+
+  // -------- FOREARM (vambrace) --------
+  const foreLen = 16 * scale;
+  const foreTopW = 3 * scale;
+  const foreBotW = 2.6 * scale;
+
+  ctx.beginPath();
+  ctx.moveTo(-foreTopW, 0);
+  ctx.lineTo( foreTopW, 0);
+  ctx.lineTo( foreBotW, foreLen);
+  ctx.lineTo(-foreBotW, foreLen);
+  ctx.closePath();
+  const foreGrad = ctx.createLinearGradient(-foreTopW, 0, foreTopW, foreLen);
+  foreGrad.addColorStop(0,    cArm2);
+  foreGrad.addColorStop(0.45, cArm);
+  foreGrad.addColorStop(0.85, cHi);
+  foreGrad.addColorStop(1,    cArm2);
+  ctx.fillStyle = foreGrad;
+  ctx.fill();
+  // vambrace highlight
+  ctx.strokeStyle = cHi;
+  ctx.lineWidth = 0.55 * scale;
+  ctx.beginPath();
+  ctx.moveTo( 1.8 * scale, 2 * scale);
+  ctx.lineTo( 1.5 * scale, foreLen - 2 * scale);
+  ctx.stroke();
+  // vambrace seam
+  ctx.strokeStyle = cArm2;
+  ctx.lineWidth = 0.4 * scale;
+  ctx.beginPath();
+  ctx.moveTo(-1.6 * scale, 3 * scale);
+  ctx.lineTo(-1.4 * scale, foreLen - 3 * scale);
+  ctx.stroke();
+
+  // -------- WRIST + HAND --------
+  ctx.save();
+  ctx.translate(0, foreLen);
+
+  // Slight wrist angle, follows forearm, doesn't rotate wildly
+  const wristAngle = 0.1;
+  ctx.rotate(wristAngle);
+
+  // wrist joint
+  ctx.fillStyle = cArm2;
+  ctx.beginPath();
+  ctx.arc(0, 0, 1.8 * scale, 0, Math.PI * 2);
+  ctx.fill();
+
+  // hand / gauntlet
+  const handR = 2.6 * scale;
+  ctx.beginPath();
+  ctx.ellipse(0, handR * 0.8, handR * 0.9, handR * 1.1, 0, 0, Math.PI * 2);
+  const hGrad = ctx.createRadialGradient(-1 * scale, -1 * scale, 0, 0, 0, handR);
+  hGrad.addColorStop(0, cHi);
+  hGrad.addColorStop(1, cHand);
+  ctx.fillStyle = hGrad;
+  ctx.fill();
+
+  // knuckle plates (3 small dots)
+  ctx.strokeStyle = goldMid;
+  ctx.lineWidth = 0.45 * scale;
+  for (let i = -1; i <= 1; i++) {
+    ctx.beginPath();
+    ctx.arc(i * 1 * scale, handR * 1.2, 0.5 * scale, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  // cuff (top of gauntlet)
+  ctx.strokeStyle = goldLight;
+  ctx.lineWidth = 0.5 * scale;
+  ctx.beginPath();
+  ctx.moveTo(-handR * 0.8, handR * 0.2);
+  ctx.lineTo( handR * 0.8, handR * 0.2);
+  ctx.stroke();
+
+  ctx.restore(); // wrist
+  ctx.restore(); // elbow
+  ctx.restore(); // shoulder
+  ctx.restore(); // arm
+}
+
+
+/* ============================================================
+   DRAW CHARACTER — knight, fully rigged
+   ============================================================ */
+function drawCharacter(palette) {
+  const cx      = W * 0.5 + Math.sin(state.t * 0.7) * 8 * DPR;
+  const groundY = H * 0.78;
+  const S       = DPR * 1.4;
+
+  const cycle = getWalkCycle(state.characterBob);
+
+  // ---------- WINTER: brace against the storm ----------
+  const isWinter = palette && palette._season === 'winter';
+  const lean     = state.characterLean + (isWinter ? 0.40 : 0) + cycle.bodyTilt;
+  const braceX   = isWinter ? -6 * S : 0;   // slightly back-footed
+  const shiver   = isWinter ? Math.sin(state.t * 30) * 0.15 * S : 0;
+
+  // ---------- ANCHOR ----------
+  const hipY    = groundY - 40 * S + cycle.bobY * S + shiver;
+  const anchorX = cx + cycle.sideSway * S + braceX;
+    // ----- HONEY CUD: сидит под деревом, слегка сдвинут влево -----
+  const cudSit = state.cudSitProgress;
+  const cudDrop   = cudSit * 24 * S;      // опускаем вниз
+  const cudShiftX = cudSit * (-140 * S);  // сдвигаем к дереву (влево)
+    // ----- CLIFF COVE: sit down -----
+  const sit = state.sittingProgress;
+  // при сидении рыцарь опускается вниз и разворачивается чуть боком
+  const sitDrop   = sit * 26 * S;      // опускаем к земле
+  const sitRotate = sit * 0.08;        // лёгкий наклон
+    // ----- SUMMER FEAST: lie down -----
+  const lie = state.lieDownProgress;
+  // при lie=1 рыцарь ложится: поворачивается на 90° и опускается
+  const lieRotation = lie * Math.PI * 0.5;   // 90° вправо
+  const lieDrop    = lie * 25 * S;           // опустить к земле
+  const lieShiftX  = lie * 10 * S;           // сдвинуть чуть вперёд
+
+  // ---------- SHADOW ----------
+  ctx.save();
+  ctx.globalAlpha = 0.35 * state.characterAlpha;
+  ctx.fillStyle = '#000';
+  const shScale = 1 - cycle.bobY * 0.02;
+  ctx.beginPath();
+  ctx.ellipse(cx + braceX, groundY + 4 * S, 34 * S * shScale, 8 * S * shScale, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+
+  // ---------- MAIN TRANSFORM ----------
+  ctx.save();
+  ctx.globalAlpha = state.characterAlpha;
+  ctx.translate(anchorX, hipY + sitDrop + lieDrop);
+  ctx.rotate(lean + sitRotate + lieRotation);
+
+  // ---------- PALETTE ----------
+  const steelDark   = '#1a1e26';
+  const steelMid    = '#3a4250';
+  const steelLight  = '#6c7a8e';
+  const steelHi     = '#b8c6d8';
+  const goldDark    = '#6a4a14';
+  const goldMid     = '#a87e24';
+  const goldLight   = '#e8c866';
+  const cloakDark   = '#4a1820';
+  const cloakMid    = '#7a2836';
+  const cloakLight  = '#b8424f';
+  const leatherDark = '#2a1d10';
+  const leatherMid  = '#4a3320';
+  const eyeGlow     = 'rgba(200,230,255,0.95)';
+
+  const colors = {
+    steelDark, steelMid, steelLight, steelHi,
+    goldDark, goldMid, goldLight,
+    cloakDark, cloakMid, cloakLight,
+    leatherDark, leatherMid, eyeGlow
+  };
+
+  const legColorsBack = {
+    armorDark: '#0e1218', armorMid: '#1e2630',
+    armorLight: '#3a4654', armorHi: '#6a7888',
+    boot: '#0a0e14', bootBuckle: '#6a4a14'
+  };
+  const legColorsFront = {
+    armorDark: steelDark, armorMid: steelMid,
+    armorLight: steelLight, armorHi: steelHi,
+    boot: leatherDark, bootBuckle: goldMid
+  };
+
+  // ---------- CLOAK (behind) ----------
+    // ---------- SOUL WINGS (behind) ----------
+  if (state.soulWingsAlpha > 0.01) {
+    const wingAlpha = state.soulWingsAlpha;
+    const spread    = state.soulWingsSpread;
+    const wingsY    = -35 * S;   // откуда растут крылья (лопатки)
+
+    ctx.save();
+    ctx.globalAlpha *= wingAlpha;
+
+    // ---- цвета: полупрозрачные, перламутровые ----
+    const featherFill  = `rgba(245, 235, 220, ${0.55})`;
+    const featherShade = `rgba(210, 190, 165, ${0.45})`;
+    const featherEdge  = `rgba(160, 140, 110, ${0.65})`;
+    const featherGlow  = `rgba(255, 240, 210, ${0.5})`;
+
+    for (const side of [-1, 1]) {
+      ctx.save();
+      ctx.translate(side * 6 * S, wingsY);
+      ctx.scale(side, 1);
+      // spread: 0 (сложены вниз) → 1 (раскрыты в стороны)
+      ctx.rotate(0.55 * (1 - spread) - 0.35 * spread);
+
+      // размах зависит от spread
+      const wingLen = 55 * S + spread * 90 * S;
+      const wingH   = 30 * S + spread * 60 * S;
+
+      // ---- свечение вокруг крыла ----
+      const glowGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, wingLen);
+      glowGrad.addColorStop(0, featherGlow);
+      glowGrad.addColorStop(1, 'rgba(255, 240, 210, 0)');
+      ctx.fillStyle = glowGrad;
+      ctx.beginPath();
+      ctx.arc(0, 0, wingLen, 0, Math.PI * 2);
+      ctx.fill();
+
+      // ---- верхняя кромка крыла ----
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.bezierCurveTo(
+        15 * S, -wingH * 0.9,
+        wingLen * 0.7, -wingH * 0.9,
+        wingLen, -wingH * 0.35
+      );
+      ctx.bezierCurveTo(
+        wingLen * 0.85, -wingH * 0.15,
+        wingLen * 0.55, wingH * 0.05,
+        wingLen * 0.35, wingH * 0.15
+      );
+      ctx.bezierCurveTo(
+        wingLen * 0.4, wingH * 0.4,
+        wingLen * 0.15, wingH * 0.55,
+        0, wingH * 0.5
+      );
+      ctx.quadraticCurveTo(-8 * S, wingH * 0.2, 0, 0);
+      ctx.closePath();
+
+      const fillGrad = ctx.createLinearGradient(0, -wingH, wingLen, wingH);
+      fillGrad.addColorStop(0,   featherFill);
+      fillGrad.addColorStop(0.55,featherShade);
+      fillGrad.addColorStop(1,   featherFill);
+      ctx.fillStyle = fillGrad;
+      ctx.fill();
+
+      ctx.strokeStyle = featherEdge;
+      ctx.lineWidth = 1.2 * S;
+      ctx.stroke();
+
+      // ---- центральная жила ----
+      ctx.strokeStyle = featherShade;
+      ctx.lineWidth = 0.9 * S;
+      ctx.beginPath();
+      ctx.moveTo(4 * S, -4 * S);
+      ctx.bezierCurveTo(
+        wingLen * 0.35, -wingH * 0.6,
+        wingLen * 0.7, -wingH * 0.4,
+        wingLen * 0.92, -wingH * 0.3
+      );
+      ctx.stroke();
+
+      // ---- маховые перья ----
+      const primaryCount = 5;
+      for (let i = 0; i < primaryCount; i++) {
+        const t = i / (primaryCount - 1);
+        const tipX = wingLen * (0.55 + t * 0.42);
+        const tipY = -wingH * (0.55 - Math.sin(t * Math.PI) * 0.3);
+        const rootX = wingLen * 0.35;
+        const rootY = -wingH * 0.2 + t * wingH * 0.45;
+
+        ctx.beginPath();
+        ctx.moveTo(rootX, rootY);
+        ctx.quadraticCurveTo(
+          (rootX + tipX) * 0.5, (rootY + tipY) * 0.5 - 10 * S,
+          tipX, tipY
+        );
+        ctx.quadraticCurveTo(
+          (rootX + tipX) * 0.5 + 5 * S, (rootY + tipY) * 0.5 + 6 * S,
+          rootX, rootY
+        );
+        ctx.closePath();
+        const pGrad = ctx.createLinearGradient(rootX, rootY, tipX, tipY);
+        pGrad.addColorStop(0, featherFill);
+        pGrad.addColorStop(0.7, featherShade);
+        pGrad.addColorStop(1, featherFill);
+        ctx.fillStyle = pGrad;
+        ctx.fill();
+        ctx.strokeStyle = featherEdge;
+        ctx.lineWidth = 0.7 * S;
+        ctx.stroke();
+      }
+
+      // ---- маленькие кроющие пёрышки у основания ----
+      for (let i = 0; i < 3; i++) {
+        const cx = 8 * S + i * 8 * S;
+        const cy = -2 * S + i * 5 * S;
+        ctx.beginPath();
+        ctx.ellipse(cx, cy, 8 * S, 3.5 * S, -0.3 + i * 0.2, 0, Math.PI * 2);
+        ctx.fillStyle = featherFill;
+        ctx.fill();
+        ctx.strokeStyle = featherEdge;
+        ctx.lineWidth = 0.5 * S;
+        ctx.stroke();
+      }
+
+      // ---- мягкое свечение у основания ----
+      const baseGlow = ctx.createRadialGradient(0, 0, 0, 0, 0, 40 * S);
+      baseGlow.addColorStop(0, 'rgba(255, 245, 220, 0.65)');
+      baseGlow.addColorStop(1, 'rgba(255, 245, 220, 0)');
+      ctx.fillStyle = baseGlow;
+      ctx.beginPath();
+      ctx.arc(0, 0, 40 * S, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.restore();
+    }
+
+    ctx.restore();
+  }
+  ctx.save();
+  const cloakSway = Math.sin(state.characterBob * 0.9) * 5 * S + cycle.sideSway * 0.6;
+  ctx.beginPath();
+  ctx.moveTo(-2 * S, -40 * S);
+  ctx.quadraticCurveTo(
+    -34 * S + cloakSway, -10 * S,
+    -28 * S + cloakSway * 1.6, 30 * S
+  );
+  ctx.lineTo(-14 * S + cloakSway * 0.8, 26 * S);
+  ctx.quadraticCurveTo(-10 * S, -20 * S, -2 * S, -60 * S);
+  const cloakGrad = ctx.createLinearGradient(-34 * S, -40 * S, 0, 30 * S);
+  cloakGrad.addColorStop(0,   cloakLight);
+  cloakGrad.addColorStop(0.5, cloakMid);
+  cloakGrad.addColorStop(1,   cloakDark);
+  ctx.fillStyle = cloakGrad;
+  ctx.fill();
+  ctx.strokeStyle = goldMid;
+  ctx.lineWidth = 1.4 * S;
+  ctx.beginPath();
+  ctx.moveTo(-2 * S, -40 * S);
+  ctx.quadraticCurveTo(
+    -34 * S + cloakSway, -10 * S,
+    -28 * S + cloakSway * 1.6, 30 * S
+  );
+  ctx.stroke();
+  ctx.restore();
+
+  // ---------- BACK SHIELD ----------
+  ctx.save();
+  ctx.translate(-16 * S, -20 * S);
+  ctx.rotate(-0.18 + cycle.shoulderTwist * 0.4);
+  ctx.beginPath();
+  ctx.moveTo(-10 * S, -14 * S);
+  ctx.lineTo( 10 * S, -14 * S);
+  ctx.lineTo( 10 * S,  8 * S);
+  ctx.quadraticCurveTo(0, 20 * S, -10 * S, 8 * S);
+  ctx.closePath();
+  const shieldGrad = ctx.createLinearGradient(-10 * S, 0, 10 * S, 0);
+  shieldGrad.addColorStop(0,   steelDark);
+  shieldGrad.addColorStop(0.5, steelMid);
+  shieldGrad.addColorStop(1,   steelDark);
+  ctx.fillStyle = shieldGrad;
+  ctx.fill();
+  ctx.strokeStyle = goldMid;
+  ctx.lineWidth = 1.6 * S;
+  ctx.stroke();
+  ctx.strokeStyle = goldLight;
+  ctx.lineWidth = 1.2 * S;
+  ctx.beginPath();
+  ctx.moveTo(0, -14 * S);
+  ctx.lineTo(0, 14 * S);
+  ctx.moveTo(-10 * S, -3 * S);
+  ctx.lineTo(10 * S, -3 * S);
+  ctx.stroke();
+  ctx.restore();
+
+  // ---------- DECIDE WHICH LEG GOES BEHIND ----------
+  // The leg with a more "backward" hip angle is farther from viewer
+  const backLegCycle  = cycle.L.hip > cycle.R.hip ? cycle.L : cycle.R;
+  const frontLegCycle = cycle.L.hip > cycle.R.hip ? cycle.R : cycle.L;
+
+  // ---------- BACK LEG ----------
+  drawLeg(backLegCycle, -3 * S, S, legColorsBack);
+
+  // ---------- TASSET SKIRT ----------
+  ctx.save();
+  ctx.translate(0, -6 * S);
+  ctx.rotate(cycle.hipTwist * 0.6);
+  for (let i = -2; i <= 2; i++) {
+    const tx = i * 4.6 * S;
+    const ty = Math.abs(i) * 1.2 * S;
+    ctx.beginPath();
+    ctx.moveTo(tx - 3.5 * S, ty);
+    ctx.lineTo(tx + 3.5 * S, ty);
+    ctx.lineTo(tx + 2.8 * S, ty + 8 * S);
+    ctx.lineTo(tx - 2.8 * S, ty + 8 * S);
+    ctx.closePath();
+    const plateGrad = ctx.createLinearGradient(tx - 3.5 * S, ty, tx + 3.5 * S, ty + 8 * S);
+    plateGrad.addColorStop(0,   steelDark);
+    plateGrad.addColorStop(0.5, steelLight);
+    plateGrad.addColorStop(1,   steelMid);
+    ctx.fillStyle = plateGrad;
+    ctx.fill();
+    ctx.strokeStyle = goldDark;
+    ctx.lineWidth = 0.55 * S;
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  // ---------- TORSO (counter-rotates with hips) ----------
+  ctx.save();
+  ctx.rotate(cycle.shoulderTwist);
+  ctx.translate(0, -12 * S);
+
+  // breastplate
+  ctx.beginPath();
+  ctx.moveTo(-11 * S, -16 * S);
+  ctx.quadraticCurveTo(0, -20 * S, 11 * S, -16 * S);
+  ctx.lineTo(12 * S, 6 * S);
+  ctx.quadraticCurveTo(0, 12 * S, -12 * S, 6 * S);
+  ctx.closePath();
+  const chestGrad = ctx.createLinearGradient(-12 * S, -16 * S, 12 * S, 12 * S);
+  chestGrad.addColorStop(0,   steelLight);
+  chestGrad.addColorStop(0.3, steelHi);
+  chestGrad.addColorStop(0.55,steelLight);
+  chestGrad.addColorStop(1,   steelDark);
+  ctx.fillStyle = chestGrad;
+  ctx.fill();
+  // center keel
+  ctx.strokeStyle = steelDark;
+  ctx.lineWidth = 0.9 * S;
+  ctx.beginPath();
+  ctx.moveTo(0, -18 * S);
+  ctx.lineTo(0, 10 * S);
+  ctx.stroke();
+  // gold collar
+  ctx.strokeStyle = goldMid;
+  ctx.lineWidth = 1.3 * S;
+  ctx.beginPath();
+  ctx.moveTo(-11 * S, -16 * S);
+  ctx.quadraticCurveTo(0, -20 * S, 11 * S, -16 * S);
+  ctx.stroke();
+  // chest cross
+  ctx.strokeStyle = goldLight;
+  ctx.lineWidth = 1.8 * S;
+  ctx.beginPath();
+  ctx.moveTo(0, -13 * S);
+  ctx.lineTo(0, 3 * S);
+  ctx.moveTo(-5 * S, -7 * S);
+  ctx.lineTo(5 * S, -7 * S);
+  ctx.stroke();
+  // rivets
+  ctx.fillStyle = goldMid;
+  for (const [rx, ry] of [[-8, -12], [8, -12], [-9, 2], [9, 2]]) {
+    ctx.beginPath();
+    ctx.arc(rx * S, ry * S, 1.1 * S, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+
+  // ---------- BELT + SWORD ----------
+  ctx.save();
+  ctx.translate(0, -5 * S);
+  ctx.rotate(cycle.hipTwist * 0.5);
+  // belt
+  ctx.fillStyle = leatherDark;
+  ctx.fillRect(-11 * S, -1 * S, 22 * S, 3.5 * S);
+  ctx.fillStyle = goldLight;
+  ctx.fillRect(-3 * S, -2 * S, 6 * S, 5.5 * S);
+  ctx.fillStyle = goldDark;
+  ctx.fillRect(-2 * S, -1 * S, 4 * S, 3.5 * S);
+  // sword
+  ctx.save();
+  ctx.rotate(0.34);
+  ctx.fillStyle = leatherDark;
+  ctx.fillRect(9 * S, -1 * S, 2.8 * S, 24 * S);
+  ctx.strokeStyle = goldDark;
+  ctx.lineWidth = 0.7 * S;
+  ctx.strokeRect(9 * S, -1 * S, 2.8 * S, 24 * S);
+  ctx.fillStyle = goldMid;
+  ctx.beginPath();
+  ctx.moveTo(9 * S, 23 * S);
+  ctx.lineTo(11.8 * S, 23 * S);
+  ctx.lineTo(10.4 * S, 28 * S);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = goldLight;
+  ctx.fillRect(6.5 * S, -3 * S, 7.6 * S, 1.8 * S);
+  ctx.fillStyle = leatherMid;
+  ctx.fillRect(9.4 * S, -8 * S, 1.8 * S, 5 * S);
+  ctx.fillStyle = goldLight;
+  ctx.beginPath();
+  ctx.arc(10.3 * S, -9 * S, 1.7 * S, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+  ctx.restore();
+
+  // ---------- FRONT LEG ----------
+  drawLeg(frontLegCycle, 3 * S, S, legColorsFront);
+
+  // ---------- ARMS (opposite phase to legs, natural elbow bend) ----------
+  // Left arm follows right leg (swing angle = -sin), right arm follows left
+  drawArm(cycle.armL, -1, S, colors, false);
+  drawArm(cycle.armR,  1, S, colors, true);
+
+  // ---------- PAULDRONS (on top of shoulders) ----------
+  function drawPauldron(sx, sy, side, isFront) {
+    ctx.save();
+    ctx.translate(sx, sy);
+    const baseCol = isFront ? steelLight : steelMid;
+    const hiCol   = isFront ? steelHi    : steelLight;
+    for (let i = 0; i < 3; i++) {
+      const offY  = i * 3.4 * S;
+      const sc    = 1 - i * 0.15;
+      const w = 8 * S * sc;
+      const h = 5.4 * S * sc;
+      ctx.beginPath();
+      ctx.ellipse(0, offY, w, h, side * 0.2, Math.PI, Math.PI * 2);
+      const pg = ctx.createLinearGradient(-w, 0, w, 0);
+      pg.addColorStop(0,   i === 0 ? hiCol : baseCol);
+      pg.addColorStop(0.5, baseCol);
+      pg.addColorStop(1,   steelDark);
+      ctx.fillStyle = pg;
+      ctx.fill();
+      ctx.strokeStyle = goldDark;
+      ctx.lineWidth = 0.5 * S;
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+  drawPauldron(-12 * S, -30 * S, -1, false);
+  drawPauldron( 12 * S, -30 * S,  1, true);
+
+  // ---------- GORGET ----------
+  ctx.beginPath();
+  ctx.moveTo(-6 * S, -36 * S);
+  ctx.lineTo( 6 * S, -36 * S);
+  ctx.lineTo( 7 * S, -30 * S);
+  ctx.lineTo(-7 * S, -30 * S);
+  ctx.closePath();
+  const gorgetGrad = ctx.createLinearGradient(-7 * S, 0, 7 * S, 0);
+  gorgetGrad.addColorStop(0,   steelDark);
+  gorgetGrad.addColorStop(0.5, steelLight);
+  gorgetGrad.addColorStop(1,   steelDark);
+  ctx.fillStyle = gorgetGrad;
+  ctx.fill();
+  ctx.strokeStyle = goldDark;
+  ctx.lineWidth = 0.5 * S;
+  ctx.stroke();
+
+  // ---------- HELMET ----------
+  ctx.save();
+  ctx.translate(0, -44* S);
+  // slight head sway, but braced against wind in winter
+  const headSway = isWinter ? Math.sin(state.characterBob) * 0.02 : Math.sin(state.characterBob * 0.5) * 0.035;
+  ctx.rotate(headSway - state.headTilt * 0.45);
+
+  // dome
+  ctx.beginPath();
+  ctx.moveTo(-10 * S, 2 * S);
+  ctx.quadraticCurveTo(-11 * S, -11 * S, 0, -13 * S);
+  ctx.quadraticCurveTo(11 * S, -11 * S, 10 * S, 2 * S);
+  ctx.lineTo(9 * S, 7 * S);
+  ctx.lineTo(-9 * S, 7 * S);
+  ctx.closePath();
+  const helmGrad = ctx.createLinearGradient(-10 * S, -13 * S, 10 * S, 7 * S);
+  helmGrad.addColorStop(0,   steelLight);
+  helmGrad.addColorStop(0.3, steelHi);
+  helmGrad.addColorStop(0.55,steelLight);
+  helmGrad.addColorStop(1,   steelDark);
+  ctx.fillStyle = helmGrad;
+  ctx.fill();
+  // center ridge
+  ctx.strokeStyle = steelHi;
+  ctx.lineWidth = 1 * S;
+  ctx.beginPath();
+  ctx.moveTo(0, -13 * S);
+  ctx.lineTo(0, 7 * S);
+  ctx.stroke();
+  // brow band
+  ctx.strokeStyle = goldMid;
+  ctx.lineWidth = 1.4 * S;
+  ctx.beginPath();
+  ctx.moveTo(-10 * S, -2 * S);
+  ctx.quadraticCurveTo(0, 0, 10 * S, -2 * S);
+  ctx.stroke();
+  // visor slit
+  ctx.fillStyle = '#05080c';
+  ctx.fillRect(-7.5 * S, -1 * S, 15 * S, 2.2 * S);
+  // glowing eyes
+  ctx.fillStyle = eyeGlow;
+  ctx.beginPath();
+  ctx.arc(-3.5 * S, 0.1 * S, 0.8 * S, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc( 3.5 * S, 0.1 * S, 0.8 * S, 0, Math.PI * 2);
+  ctx.fill();
+  // breathing holes
+  ctx.strokeStyle = '#05080c';
+  ctx.lineWidth = 0.5 * S;
+  for (let i = -2; i <= 2; i++) {
+    if (i === 0) continue;
+    ctx.beginPath();
+    ctx.moveTo(i * 2.2 * S, 3 * S);
+    ctx.lineTo(i * 2.2 * S, 6 * S);
+    ctx.stroke();
+  }
+  // cheek plates
+  ctx.strokeStyle = steelDark;
+  ctx.lineWidth = 0.65 * S;
+  ctx.beginPath();
+  ctx.moveTo(-9 * S, 2 * S);
+  ctx.lineTo(-6.5 * S, 7 * S);
+  ctx.moveTo( 9 * S, 2 * S);
+  ctx.lineTo( 6.5 * S, 7 * S);
+  ctx.stroke();
+  // crest holder
+  ctx.fillStyle = goldMid;
+  ctx.beginPath();
+  ctx.moveTo(-1.5 * S, -13 * S);
+  ctx.lineTo( 1.5 * S, -13 * S);
+  ctx.lineTo( 2 * S, -15 * S);
+  ctx.lineTo(-2 * S, -15 * S);
+  ctx.closePath();
+  ctx.fill();
+
+  // ---------- CREST (plume) ----------
+  ctx.save();
+  ctx.translate(0, -15 * S);
+  const crestSway = -cycle.sideSway * 1.4 * S
+                  - Math.sin(state.characterBob * 1.3) * 2.2 * S
+                  + (isWinter ? -6 * S + Math.sin(state.t * 12) * 1.5 * S : 0);
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.quadraticCurveTo(
+    -3 * S + crestSway, -7 * S,
+    -1 * S + crestSway * 1.6, -15 * S
+  );
+  ctx.quadraticCurveTo(
+    2 * S + crestSway, -17 * S,
+    3 * S + crestSway * 0.5, -9 * S
+  );
+  ctx.quadraticCurveTo(2 * S, -3 * S, 0, 0);
+  const crestGrad = ctx.createLinearGradient(0, -17 * S, 0, 0);
+  crestGrad.addColorStop(0,   cloakLight);
+  crestGrad.addColorStop(0.5, cloakMid);
+  crestGrad.addColorStop(1,   cloakDark);
+  ctx.fillStyle = crestGrad;
+  ctx.fill();
+  // crest strands
+  ctx.strokeStyle = cloakDark;
+  ctx.lineWidth = 0.4 * S;
+  for (let i = 0; i < 3; i++) {
+    ctx.beginPath();
+    ctx.moveTo(-1 * S + i * 1 * S, 0);
+    ctx.quadraticCurveTo(
+      -2 * S + i * 2 * S + crestSway, -7 * S,
+      0 + i * 1 * S + crestSway * 1.2, -14 * S
+    );
+    ctx.stroke();
+  }
+  ctx.restore(); // crest
+
+  ctx.restore(); // helmet
+
+  
+
+  ctx.restore(); // main transform
+}
+
+/* ============================================================
+   SNOW DRIFTS — white mounds of snow on the ground (winter only)
+   ============================================================ */
+function drawSnowDrifts(palette, season) {
+  if (season !== 'winter') return;
+
+  const groundY = H * 0.78;
+
+  ctx.save();
+
+  // ---- базовый слой: мягкие пышные сугробы ----
+  // Несколько перекрывающихся эллипсов разных размеров по всей линии горизонта
+  const drifts = [
+    { x: W * 0.05, w: 180, h: 40 },
+    { x: W * 0.18, w: 140, h: 30 },
+    { x: W * 0.28, w: 200, h: 50 },
+    { x: W * 0.42, w: 160, h: 35 },
+    { x: W * 0.55, w: 220, h: 55 },
+    { x: W * 0.70, w: 170, h: 38 },
+    { x: W * 0.82, w: 190, h: 48 },
+    { x: W * 0.95, w: 150, h: 32 }
+  ];
+
+  for (let i = 0; i < drifts.length; i++) {
+    const d = drifts[i];
+    const dx = d.x * DPR;
+    const dw = d.w * DPR;
+    const dh = d.h * DPR;
+
+    // цвет: чуть темнее фона зимой, чтобы выделялись
+    const grad = ctx.createLinearGradient(dx, groundY - dh, dx, groundY + 10 * DPR);
+    grad.addColorStop(0,    'rgba(255, 255, 255, 0.95)');
+    grad.addColorStop(0.5,  'rgba(235, 240, 250, 0.9)');
+    grad.addColorStop(1,    'rgba(200, 210, 225, 0.85)');
+
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.ellipse(dx, groundY - dh * 0.15, dw, dh, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // ---- верхний блестящий слой на гребнях ----
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.75)';
+  for (let i = 0; i < drifts.length; i++) {
+    const d = drifts[i];
+    const dx = d.x * DPR;
+    const dw = d.w * DPR * 0.7;
+    const dh = d.h * DPR * 0.4;
+    ctx.beginPath();
+    ctx.ellipse(dx - dw * 0.15, groundY - d.h * DPR * 0.35, dw, dh, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // ---- несколько сугробов помельче ближе к переднему плану ----
+  ctx.fillStyle = 'rgba(245, 250, 255, 0.9)';
+  for (let i = 0; i < 14; i++) {
+    const seed = i * 137.4;
+    const x = ((i * 173.7) % W);
+    const w = (18 + (seed % 40)) * DPR;
+    const h = (6 + (seed % 8)) * DPR;
+    ctx.beginPath();
+    ctx.ellipse(x, groundY + 22 * DPR + (seed % 30) * DPR, w, h, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // ---- лёгкое свечение по верхушкам ----
+  for (let i = 0; i < drifts.length; i += 2) {
+    const d = drifts[i];
+    const dx = d.x * DPR;
+    const g = ctx.createRadialGradient(
+      dx, groundY - d.h * DPR * 0.5, 0,
+      dx, groundY - d.h * DPR * 0.5, d.w * DPR * 0.6
+    );
+    g.addColorStop(0, 'rgba(255, 255, 255, 0.4)');
+    g.addColorStop(1, 'rgba(255, 255, 255, 0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(dx, groundY - d.h * DPR * 0.5, d.w * DPR * 0.6, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  ctx.restore();
+}
+
+/* ============================================================
+   FALLEN LEAVES — scattered on the ground in autumn
+   ============================================================ */
+function drawFallenLeaves(palette, season) {
+  if (season !== 'autumn') return;
+
+  const groundY = H * 0.78;
+
+  ctx.save();
+
+  const leafCount = 140;
+
+  for (let i = 0; i < leafCount; i++) {
+    // псевдослучайные значения — стабильные, без мерцания
+    const r1 = Math.abs(Math.sin(i * 12.9898) * 43758.5453) % 1;
+    const r2 = Math.abs(Math.sin(i * 78.233)  * 12345.6789) % 1;
+    const r3 = Math.abs(Math.sin(i * 39.425)  * 98765.4321) % 1;
+    const r4 = Math.abs(Math.sin(i * 91.731)  * 54321.0987) % 1;
+
+    // ---- позиция по всей земле ----
+    // X — по всей ширине
+    const lx = r1 * W;
+
+    // Y — от линии горизонта до самого низа экрана (глубина)
+    // чем ниже — тем крупнее и ближе к камере
+    const depth = r2;                          // 0 (далеко) .. 1 (близко)
+    const ly = groundY + 4 * DPR + depth * (H - groundY - 8 * DPR);
+
+    // ---- размер зависит от глубины ----
+    // далеко — мелкие, близко — крупные
+    const size = (3 + depth * 8 + r3 * 3) * DPR;
+
+    // ---- угол поворота — вразброс ----
+    const rot = r4 * Math.PI * 2;
+
+    // ---- цвет — осенняя палитра, разброс ----
+    const hue   = 8 + r1 * 45;       // 8..53 — от красного к жёлтому
+    const sat   = 55 + r2 * 35;      // 55..90
+    const light = 30 + r3 * 30;      // 30..60
+
+    ctx.save();
+    ctx.translate(lx, ly);
+    ctx.rotate(rot);
+
+    // ---- тень (смещается от глубины) ----
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.15)';
+    ctx.beginPath();
+    ctx.ellipse(1.2 * DPR, 1.2 * DPR, size, size * 0.5, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // ---- лист ----
+    ctx.fillStyle = `hsla(${hue}, ${sat}%, ${light}%, 0.95)`;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, size, size * 0.5, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // ---- прожилка ----
+    ctx.strokeStyle = `hsla(${hue}, ${sat}%, ${light - 15}%, 0.75)`;
+    ctx.lineWidth = 0.7 * DPR;
+    ctx.beginPath();
+    ctx.moveTo(-size, 0);
+    ctx.lineTo(size, 0);
+    ctx.stroke();
+
+    // ---- черешок ----
+    ctx.strokeStyle = `hsla(${hue}, ${sat - 10}%, ${light - 20}%, 0.85)`;
+    ctx.lineWidth = 0.8 * DPR;
+    ctx.beginPath();
+    ctx.moveTo(size * 0.8, 0);
+    ctx.lineTo(size * 1.3, size * 0.15);
+    ctx.stroke();
+
+    ctx.restore();
+  }
+
+  // ---- небольшие кучки листьев у стволов ----
+  const piles = [
+    { x: W * 0.16, y: groundY + 20 * DPR },
+    { x: W * 0.45, y: groundY + 30 * DPR },
+    { x: W * 0.72, y: groundY + 25 * DPR }
+  ];
+
+  for (const p of piles) {
+    for (let k = 0; k < 8; k++) {
+      const angle = (k / 8) * Math.PI * 2 + p.x * 0.01;
+      const r = (5 + (k * 3)) * DPR;
+      const px = p.x + Math.cos(angle) * r;
+      const py = p.y + Math.sin(angle) * r * 0.4;
+
+      const hue = 15 + k * 4;
+      ctx.fillStyle = `hsla(${hue}, 70%, 45%, 0.9)`;
+      ctx.beginPath();
+      ctx.ellipse(px, py, 6 * DPR, 3 * DPR, angle, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  ctx.restore();
+}
+/* ---------- BACKGROUND LAYERS ---------- */
+/* ============================================================
+   SEASONAL TREE — left of the knight, changes with seasons
+   ============================================================ */
+function drawSeasonalTree(palette, season) {
+  // Position: left side, rooted at ground
+  const treeX = W * 0.16;
+  const groundY = H * 0.78;
+
+  // размер дерева — можно менять
+  const TREE_SCALE = 1.6;
+  const S = DPR * TREE_SCALE;
+
+  ctx.save();
+  ctx.translate(treeX, groundY);
+
+  // ---------- TRUNK ----------
+  const trunkH = 130 * S;
+  const trunkW = 14 * S;
+
+  // коричневый цвет ствола, зимой — темнее
+  const trunkColor = season === 'winter' ? '#2a1d12' : '#3a2a1a';
+  const trunkHi    = season === 'winter' ? '#4a3a2a' : '#6a4a2a';
+
+  // расширяющийся ствол
+  ctx.fillStyle = trunkColor;
+  ctx.beginPath();
+  ctx.moveTo(-trunkW * 0.5, 0);
+  ctx.lineTo( trunkW * 0.5, 0);
+  ctx.lineTo( trunkW * 0.35, -trunkH);
+  ctx.lineTo(-trunkW * 0.35, -trunkH);
+  ctx.closePath();
+  ctx.fill();
+
+  // подсветка ствола (блик слева)
+  ctx.fillStyle = trunkHi;
+  ctx.beginPath();
+  ctx.moveTo(-trunkW * 0.5, 0);
+  ctx.lineTo(-trunkW * 0.2, 0);
+  ctx.lineTo(-trunkW * 0.15, -trunkH);
+  ctx.lineTo(-trunkW * 0.35, -trunkH);
+  ctx.closePath();
+  ctx.fill();
+
+  // ---------- ROOTS ----------
+  ctx.fillStyle = trunkColor;
+  for (const side of [-1, 1]) {
+    ctx.beginPath();
+    ctx.moveTo(-trunkW * 0.4 * side, -4 * S);
+    ctx.lineTo(side * 22 * S, 4 * S);
+    ctx.lineTo(side * 26 * S, 6 * S);
+    ctx.lineTo(side * 12 * S, -2 * S);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  // ---------- BRANCHES ----------
+  // 4 главные ветки — расходятся из одной точки
+  const branchBaseY = -trunkH + 10 * S;
+  const branches = [
+    { angle: -0.95, len: 60 },   // верхняя левая
+    { angle: -0.35, len: 75 },   // верхняя правая
+    { angle: -1.30, len: 45 },   // нижняя левая
+    { angle: -0.05, len: 55 }    // нижняя правая
+  ];
+
+  ctx.strokeStyle = trunkColor;
+  ctx.lineWidth = 6 * S;
+  ctx.lineCap = 'round';
+
+  const branchTips = [];
+  for (const b of branches) {
+    const ex = Math.sin(b.angle) * b.len * S * 1.2;
+    const ey = branchBaseY - Math.cos(b.angle) * b.len * S * 1.2;
+
+    ctx.beginPath();
+    ctx.moveTo(0, branchBaseY);
+    ctx.quadraticCurveTo(ex * 0.4, branchBaseY - Math.abs(ey - branchBaseY) * 0.5, ex, ey);
+    ctx.stroke();
+
+    // подветка
+    const subAngle = b.angle + (b.angle > -0.7 ? -0.25 : 0.25);
+    const subLen = b.len * 0.55;
+    const sx = ex + Math.sin(subAngle) * subLen * S;
+    const sy = ey - Math.cos(subAngle) * subLen * S;
+
+    ctx.lineWidth = 3.5 * S;
+    ctx.beginPath();
+    ctx.moveTo(ex * 0.85, ey * 0.95 + branchBaseY * 0.05);
+    ctx.lineTo(sx, sy);
+    ctx.stroke();
+    ctx.lineWidth = 6 * S;
+
+    branchTips.push({ x: ex, y: ey });
+    branchTips.push({ x: sx, y: sy });
+  }
+
+  // ---------- CROWN / LEAVES / BLOSSOMS / SNOW ----------
+
+      // ============ SPRING ============
+  if (season === 'spring') {
+    // Индекс строки: 2 = первая весенняя (распускание), 3 = вторая (всё готово)
+    const isFirstSpringLine = state.line === 2;
+
+    // Прогресс распускания — только для первой строки
+    let globalBloom;
+    if (isFirstSpringLine) {
+      const lineDur = LINES[state.line].dur;
+      const lineT   = state.t / lineDur;
+      globalBloom = Math.min(1, lineT / 0.6);   // 0..1 за 60% строки
+    } else {
+      globalBloom = 1;   // вторая строка — цветы уже распущены
+    }
+
+    // ---- ЦВЕТЫ ----
+    for (let bi = 0; bi < branchTips.length; bi++) {
+      const tip = branchTips[bi];
+      const flowerCount = 8;
+
+      for (let k = 0; k < flowerCount; k++) {
+        const seed = (bi * 13 + k * 7) % 100;
+        const a = (k / flowerCount) * Math.PI * 2 + seed * 0.1;
+        const r = (8 + (seed % 10)) * S;
+        const fx = tip.x + Math.cos(a) * r;
+        const fy = tip.y + Math.sin(a) * r * 0.7;
+
+        // для первой строки — задержка распускания у каждого цветка своя
+        let localBloom;
+        if (isFirstSpringLine) {
+          const stagger = (seed % 20) / 100;
+          localBloom = Math.max(0, Math.min(1, (globalBloom - stagger) / 0.6));
+        } else {
+          localBloom = 1;
+        }
+        if (localBloom < 0.05) continue;
+
+        const size = (3 + (seed % 5) * 0.6) * S * localBloom;
+
+        // 5 лепестков
+        for (let p = 0; p < 5; p++) {
+          const pa = (p / 5) * Math.PI * 2 + seed * 0.05;
+          const px = fx + Math.cos(pa) * size;
+          const py = fy + Math.sin(pa) * size;
+          const hue = 320 + (seed % 40);
+          ctx.fillStyle = `hsla(${hue}, 75%, 78%, ${0.95 * localBloom})`;
+          ctx.beginPath();
+          ctx.arc(px, py, size * 0.75, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        // жёлтая серединка
+        ctx.fillStyle = `rgba(255, 240, 140, ${0.98 * localBloom})`;
+        ctx.beginPath();
+        ctx.arc(fx, fy, size * 0.5, 0, Math.PI * 2);
+        ctx.fill();
+
+        // блик
+        ctx.fillStyle = `rgba(255, 255, 255, ${0.55 * localBloom})`;
+        ctx.beginPath();
+        ctx.arc(fx - size * 0.3, fy - size * 0.3, size * 0.2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    // ---- БУТОНЫ — только на первой строке, и они исчезают по мере распускания ----
+    if (isFirstSpringLine) {
+      const lineDur = LINES[state.line].dur;
+      const lineT   = state.t / lineDur;
+
+      for (let bi = 0; bi < branchTips.length; bi++) {
+        const tip = branchTips[bi];
+        const budCount = 5;
+        for (let k = 0; k < budCount; k++) {
+          const seed = (bi * 17 + k * 11) % 100;
+          const budAlpha = Math.max(0, 1 - lineT / 0.5);   // бутоны исчезают к 50%
+          if (budAlpha < 0.05) continue;
+
+          const a = (k / budCount) * Math.PI * 2 + seed * 0.2;
+          const r = (6 + (seed % 6)) * S;
+          const bx = tip.x + Math.cos(a) * r;
+          const by = tip.y + Math.sin(a) * r * 0.7;
+          const budSize = (2.5 + (seed % 3) * 0.4) * S;
+
+          // зелёная чашечка
+          ctx.fillStyle = `rgba(80, 130, 60, ${0.9 * budAlpha})`;
+          ctx.beginPath();
+          ctx.ellipse(bx, by + budSize * 0.5, budSize * 0.7, budSize * 0.5, 0, 0, Math.PI * 2);
+          ctx.fill();
+
+          // розовый бутон
+          ctx.fillStyle = `hsla(330, 70%, 82%, ${0.95 * budAlpha})`;
+          ctx.beginPath();
+          ctx.ellipse(bx, by, budSize * 0.8, budSize * 1.2, 0, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+    }
+  }
+
+  // ============ SUMMER: пышная зелёная крона ============
+  else if (season === 'summer') {
+    // крона: много перекрывающихся кругов зелёного
+    const crownColors = [
+      'rgba(60, 110, 40, 0.95)',
+      'rgba(80, 130, 50, 0.95)',
+      'rgba(45, 90, 30, 0.95)',
+      'rgba(95, 145, 60, 0.95)'
+    ];
+
+    // основная масса
+    const crownY = branchBaseY - 45 * S;
+    const crownR = 70 * S;
+
+    // большой круг центра
+    ctx.fillStyle = crownColors[0];
+    ctx.beginPath();
+    ctx.arc(0, crownY, crownR, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 12 боковых кругов вокруг
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * Math.PI * 2;
+      const r = crownR * 0.75;
+      const cx = Math.cos(a) * r;
+      const cy = crownY + Math.sin(a) * r;
+      ctx.fillStyle = crownColors[i % 4];
+      ctx.beginPath();
+      ctx.arc(cx, cy, crownR * 0.55, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // блики света сверху (солнечные пятна)
+    ctx.fillStyle = 'rgba(180, 220, 130, 0.4)';
+    for (let i = 0; i < 6; i++) {
+      const a = -Math.PI * 0.75 + i * 0.25;
+      const r = crownR * 0.6;
+      const cx = Math.cos(a) * r;
+      const cy = crownY + Math.sin(a) * r * 0.5;
+      ctx.beginPath();
+      ctx.arc(cx, cy, crownR * 0.3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // тёмная тень снизу
+    ctx.fillStyle = 'rgba(20, 40, 15, 0.4)';
+    ctx.beginPath();
+    ctx.arc(0, crownY + crownR * 0.6, crownR * 0.7, 0, Math.PI);
+    ctx.fill();
+  }
+
+  // ============ AUTUMN: без листьев, голые ветки ============
+  else if (season === 'autumn') {
+    // почти ничего — только редкие опадающие листья
+    for (let i = 0; i < 8; i++) {
+      const t = (state.objectPulse * 0.5 + i * 0.4) % 1;
+      const px = -30 * S + ((i * 23) % 60) * S;
+      const py = branchBaseY + t * 90 * S;
+      const fade = 1 - t;
+      ctx.fillStyle = `hsla(${25 + i * 3}, 75%, 50%, ${0.8 * fade})`;
+      ctx.beginPath();
+      ctx.ellipse(px, py, 4 * S, 2 * S, t * 4, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  // ============ WINTER: без листьев, в снегу ============
+  else if (season === 'winter') {
+    // снежные шапки на ветках
+    ctx.fillStyle = 'rgba(230, 240, 255, 0.85)';
+
+    // на каждой ветке — снежная линия
+    for (const tip of branchTips) {
+      ctx.beginPath();
+      ctx.ellipse(tip.x, tip.y - 4 * S, 12 * S, 5 * S, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // снег на стволе — тонкая полоса слева
+    ctx.fillStyle = 'rgba(230, 240, 255, 0.7)';
+    ctx.beginPath();
+    ctx.moveTo(-trunkW * 0.45, -10 * S);
+    ctx.lineTo(-trunkW * 0.25, -10 * S);
+    ctx.lineTo(-trunkW * 0.15, -trunkH + 20 * S);
+    ctx.lineTo(-trunkW * 0.35, -trunkH + 20 * S);
+    ctx.closePath();
+    ctx.fill();
+
+    // снег на верхушке кроны (если была бы)
+    ctx.fillStyle = 'rgba(240, 245, 255, 0.9)';
+    for (let i = 0; i < 5; i++) {
+      const a = -Math.PI * 0.9 + i * 0.4;
+      const cx = Math.cos(a) * 40 * S;
+      const cy = branchBaseY - 30 * S + Math.sin(a) * 20 * S;
+      ctx.beginPath();
+      ctx.arc(cx, cy, 10 * S, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // сосульки, свисающие с веток
+    ctx.strokeStyle = 'rgba(200, 225, 245, 0.8)';
+    ctx.lineWidth = 2 * S;
+    for (const tip of branchTips) {
+      const iceLen = (8 + Math.random() * 8) * S;
+      ctx.beginPath();
+      ctx.moveTo(tip.x, tip.y);
+      ctx.lineTo(tip.x + 1 * S, tip.y + iceLen);
+      ctx.stroke();
+    }
+  }
+
+  ctx.restore();
+}
+function drawSky(palette) {
+  const g = ctx.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, rgba(palette.sky1));
+  g.addColorStop(0.55, rgba(lerpColor(palette.sky1, palette.sky2, 0.5)));
+  g.addColorStop(1, rgba(palette.sky2));
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, W, H);
+}
+
+function drawSunAndMoon(palette, season) {
+  if (season === 'winter') {
+    // pale ghost moon
+    const mx = W * 0.25, my = H * 0.18, r = 42 * DPR;
+    const g = ctx.createRadialGradient(mx, my, 0, mx, my, r * 4);
+    g.addColorStop(0, 'rgba(200,210,230,0.35)');
+    g.addColorStop(0.4, 'rgba(160,175,200,0.15)');
+    g.addColorStop(1, 'rgba(160,175,200,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(mx, my, r * 4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(220,225,240,0.85)';
+    ctx.beginPath();
+    ctx.arc(mx, my, r * 0.8, 0, Math.PI * 2);
+    ctx.fill();
+    return;
+  }
+  if (season === 'final') {
+    const g = ctx.createRadialGradient(W/2, H*0.4, 0, W/2, H*0.4, H);
+    g.addColorStop(0, 'rgba(255,255,255,0.9)');
+    g.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
+    return;
+  }
+  if (season === 'prologue') return;
+
+  const isSummer = season === 'summer';
+  const sunY = isSummer ? H * 0.13 : H * 0.22;
+  const sunX = isSummer ? W * 0.72 : W * 0.28;
+  const r = (isSummer ? 75 : 55) * DPR;
+
+  const g = ctx.createRadialGradient(sunX, sunY, 0, sunX, sunY, r * 3.5);
+  g.addColorStop(0, rgba(palette.accent, 0.95));
+  g.addColorStop(0.25, rgba(palette.accent, 0.5));
+  g.addColorStop(0.6, rgba(palette.accent, 0.12));
+  g.addColorStop(1, rgba(palette.accent, 0));
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.arc(sunX, sunY, r * 3.5, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = rgba([255, 250, 230], 0.95);
+  ctx.beginPath();
+  ctx.arc(sunX, sunY, r, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function drawGround(palette, season) {
+  const groundY = H * 0.78;
+  const g = ctx.createLinearGradient(0, groundY, 0, H);
+  g.addColorStop(0, rgba(palette.ground));
+  g.addColorStop(1, rgba(lerpColor(palette.ground, [0, 0, 0], 0.55)));
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.moveTo(0, groundY);
+  for (let x = 0; x <= W; x += 30) {
+    const y = groundY + Math.sin(x * 0.004 + state.t * 0.6) * 9 * DPR;
+    ctx.lineTo(x, y);
+  }
+  ctx.lineTo(W, H);
+  ctx.lineTo(0, H);
+  ctx.closePath();
+  ctx.fill();
+
+
+}
+
+/* ---------- SEASONAL SPIRITS (symbolic objects) ---------- */
+function drawSeasonalObject(season, objName) {
+  if (objName === 'dial' && state.dialActive && state.dialAlpha > 0.01) {
+    drawDial();
+    return;
+  }
+    // ----- HONEY CUD — воспоминания о весне -----
+  if (objName === 'honeyCud') {
+    drawHoneyCud();
+    return;
+  }
+    // ----- MIST PASSING — образы плывут мимо рыцаря -----
+  if (objName === 'mistPassing') {
+    drawMistPassing();
+    return;
+  }
+  
+    // ----- CLIFF COVE — sky opens to reveal the bay -----
+  if (objName === 'cliffCove') {
+    drawCliffCove();
+    // продолжаем рисовать остальные объекты
+  }
+    // ----- WOLF HOWLING on the hill — winter only -----
+  if (season === 'winter') {
+    drawWolf(season);
+  }
+    // ----- HONEY JARS — lots of jars around the knight -----
+  if (state.honeyJarAlpha > 0.01) {
+    drawHoneyJars();
+    // не возвращаемся, продолжаем — пусть и другие объекты рисуются
+  }
+
+  if (objName === 'thoughts') {
+    drawThoughts();
+    return;
+  }
+  
+
+  if (state.objectAlpha <= 0.01) return;
+  
+ 
+  if (state.objectAlpha <= 0.01) return;
+    // ----- CLOUD DREAMS — clouds form shapes -----
+  if (objName === 'cloudDreams') {
+    drawCloudDreams();
+    return;
+  }
+  const cx = W * 0.5;
+  const cy = H * 0.62;
+  const pulse = 1 + Math.sin(state.objectPulse) * 0.05;
+  const scale = state.objectScale * pulse;
+
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.scale(scale, scale);
+  ctx.globalAlpha = state.objectAlpha;
+
+  if (objName === 'seasons') {
+  // ---------------------------------------------------------
+  // Light beam from above, splitting into 4 colored rays
+  // Each ray carries one season icon
+  // ---------------------------------------------------------
+
+  const seasons = [
+    { color: [255, 180, 210], icon: 'flower' },  // Spring
+    { color: [255, 220, 120], icon: 'sun'    },  // Summer
+    { color: [210, 110,  60], icon: 'leaf'   },  // Autumn
+    { color: [170, 200, 230], icon: 'snow'   }   // Winter
+  ];
+
+  const iconSize = 26 * DPR;
+
+  // ---- Source of the light beam (top center) ----
+  const beamSrcX = 0;
+  const beamSrcY = -H * 0.55;   // way above the screen
+  const splitY   = 0;           // where the beam starts splitting
+
+  // ---- Inner beam: single white column from above ----
+  const innerBeamW = 30 * DPR;
+  const innerGrad = ctx.createLinearGradient(0, beamSrcY, 0, splitY);
+  innerGrad.addColorStop(0,    'rgba(255, 255, 255, 0.0)');
+  innerGrad.addColorStop(0.55, 'rgba(255, 255, 255, 0.18)');
+  innerGrad.addColorStop(0.9,  'rgba(255, 255, 255, 0.45)');
+  innerGrad.addColorStop(1,    'rgba(255, 255, 255, 0.6)');
+  ctx.fillStyle = innerGrad;
+  ctx.beginPath();
+  ctx.moveTo(beamSrcX - innerBeamW * 0.3, beamSrcY);
+  ctx.lineTo(beamSrcX + innerBeamW * 0.3, beamSrcY);
+  ctx.lineTo(beamSrcX + innerBeamW * 0.5, splitY);
+  ctx.lineTo(beamSrcX - innerBeamW * 0.5, splitY);
+  ctx.closePath();
+  ctx.fill();
+
+  // ---- Soft halo at split point ----
+  const halo = ctx.createRadialGradient(0, splitY, 0, 0, splitY, 90 * DPR);
+  halo.addColorStop(0,   'rgba(255, 255, 255, 0.5)');
+  halo.addColorStop(0.5, 'rgba(255, 255, 255, 0.15)');
+  halo.addColorStop(1,   'rgba(255, 255, 255, 0)');
+  ctx.fillStyle = halo;
+  ctx.beginPath();
+  ctx.arc(0, splitY, 90 * DPR, 0, Math.PI * 2);
+  ctx.fill();
+
+  // ---- 4 colored rays spreading downward-outward ----
+  const rayLength   = 280 * DPR;
+  const raySpread   = 0.55;            // angle spread (radians) between rays
+  const iconDist    = 200 * DPR;       // where along the ray the icon sits
+
+  for (let i = 0; i < 4; i++) {
+    const s = seasons[i];
+
+    // angle: -1.5 rad (far left) .. +1.5 rad (far right) — downward
+    const t = i / 3;                          // 0..1
+    const angle = Math.PI / 2 + (t - 0.5) * raySpread * 2; // points down
+
+    // actually we want rays spreading at 4 distinct angles
+    // rewrite: fixed angles: -0.9, -0.3, +0.3, +0.9 rad relative to straight-down
+    const angles = [-1.0, -0.35, 0.35, 1.0];  // radians from vertical
+    const a = angles[i];
+
+    // ray direction (mostly downward, tilted by a)
+    const dirX = Math.sin(a);
+    const dirY = Math.cos(a);
+
+    // ---- Ray cone ----
+    const endX = dirX * rayLength;
+    const endY = splitY + dirY * rayLength;
+    const wideNear = 8  * DPR;
+    const wideFar  = 40 * DPR;
+
+    // perpendicular vector for cone width
+    const perpX = -dirY;
+    const perpY =  dirX;
+
+    ctx.beginPath();
+    ctx.moveTo(perpX * wideNear, splitY + perpY * wideNear);
+    ctx.lineTo(-perpX * wideNear, splitY - perpY * wideNear);
+    ctx.lineTo(endX - perpX * wideFar, endY - perpY * wideFar);
+    ctx.lineTo(endX + perpX * wideFar, endY + perpY * wideFar);
+    ctx.closePath();
+
+    const rayGrad = ctx.createLinearGradient(0, splitY, endX, endY);
+    rayGrad.addColorStop(0,   rgba(s.color, 0.55));
+    rayGrad.addColorStop(0.4, rgba(s.color, 0.28));
+    rayGrad.addColorStop(1,   rgba(s.color, 0));
+    ctx.fillStyle = rayGrad;
+    ctx.fill();
+
+    // ---- Inner bright line of the ray ----
+    ctx.beginPath();
+    ctx.moveTo(0, splitY);
+    ctx.lineTo(endX * 0.85, splitY + dirY * rayLength * 0.85);
+    ctx.strokeStyle = rgba(s.color, 0.75);
+    ctx.lineWidth = 1.8 * DPR;
+    ctx.lineCap = 'round';
+    ctx.stroke();
+
+    // ---- ICON at fixed distance along the ray ----
+    const iconX = dirX * iconDist;
+    const iconY = splitY + dirY * iconDist;
+
+    // glow behind icon
+    const glow = ctx.createRadialGradient(iconX, iconY, 0, iconX, iconY, 70 * DPR);
+    glow.addColorStop(0,   rgba(s.color, 0.55));
+    glow.addColorStop(0.5, rgba(s.color, 0.2));
+    glow.addColorStop(1,   rgba(s.color, 0));
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.arc(iconX, iconY, 70 * DPR, 0, Math.PI * 2);
+    ctx.fill();
+
+    // ---- icon drawing ----
+    ctx.save();
+    ctx.translate(iconX, iconY);
+
+    const pulse = 1 + Math.sin(state.objectPulse * 1.2 + i * 1.7) * 0.08;
+    ctx.scale(pulse, pulse);
+
+    // dark round backing
+    ctx.beginPath();
+    ctx.arc(0, 0, iconSize * 1.35, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(10, 12, 20, 0.5)';
+    ctx.fill();
+    ctx.strokeStyle = rgba(s.color, 0.9);
+    ctx.lineWidth = 1.8 * DPR;
+    ctx.stroke();
+
+    // ===== SPRING: FLOWER =====
+    if (s.icon === 'flower') {
+      for (let p = 0; p < 6; p++) {
+        const pa = (p / 6) * Math.PI * 2;
+        ctx.beginPath();
+        ctx.arc(Math.cos(pa) * iconSize * 0.55, Math.sin(pa) * iconSize * 0.55, iconSize * 0.38, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(255, 200, 225, 0.95)';
+        ctx.fill();
+      }
+      ctx.beginPath();
+      ctx.arc(0, 0, iconSize * 0.35, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255, 230, 120, 0.98)';
+      ctx.fill();
+    }
+
+    // ===== SUMMER: SUN =====
+    else if (s.icon === 'sun') {
+      ctx.strokeStyle = 'rgba(255, 220, 130, 0.95)';
+      ctx.lineWidth = 2 * DPR;
+      ctx.lineCap = 'round';
+      for (let r = 0; r < 10; r++) {
+        const ra = (r / 10) * Math.PI * 2;
+        ctx.beginPath();
+        ctx.moveTo(Math.cos(ra) * iconSize * 0.85, Math.sin(ra) * iconSize * 0.85);
+        ctx.lineTo(Math.cos(ra) * iconSize * 1.15, Math.sin(ra) * iconSize * 1.15);
+        ctx.stroke();
+      }
+      ctx.beginPath();
+      ctx.arc(0, 0, iconSize * 0.7, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255, 235, 130, 1)';
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(-iconSize * 0.15, -iconSize * 0.15, iconSize * 0.35, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255, 255, 220, 0.85)';
+      ctx.fill();
+    }
+
+    // ===== AUTUMN: LEAF =====
+    else if (s.icon === 'leaf') {
+      ctx.fillStyle = 'rgba(220, 110, 55, 0.98)';
+      const R = iconSize * 0.95;
+      const pts = [
+        [0, -R], [R*0.22, -R*0.42], [R*0.75, -R*0.62], [R*0.42, -R*0.14],
+        [R*0.95, R*0.08], [R*0.35, R*0.22], [R*0.5, R*0.7], [0, R*0.42],
+        [-R*0.5, R*0.7], [-R*0.35, R*0.22], [-R*0.95, R*0.08],
+        [-R*0.42, -R*0.14], [-R*0.75, -R*0.62], [-R*0.22, -R*0.42]
+      ];
+      ctx.beginPath();
+      ctx.moveTo(pts[0][0], pts[0][1]);
+      for (let k = 1; k < pts.length; k++) ctx.lineTo(pts[k][0], pts[k][1]);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(140, 60, 20, 0.75)';
+      ctx.lineWidth = 1.2 * DPR;
+      ctx.beginPath();
+      ctx.moveTo(0, -R*0.85);
+      ctx.lineTo(0, R*0.4);
+      ctx.stroke();
+      ctx.strokeStyle = 'rgba(120, 60, 30, 0.9)';
+      ctx.lineWidth = 2 * DPR;
+      ctx.beginPath();
+      ctx.moveTo(0, R*0.4);
+      ctx.lineTo(0, R*0.85);
+      ctx.stroke();
+    }
+
+    // ===== WINTER: SNOWFLAKE =====
+    else if (s.icon === 'snow') {
+      ctx.strokeStyle = 'rgba(200, 225, 250, 0.98)';
+      ctx.lineWidth = 2 * DPR;
+      ctx.lineCap = 'round';
+      const armLen = iconSize * 0.9;
+      for (let a = 0; a < 6; a++) {
+        const ang = (a / 6) * Math.PI * 2;
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(Math.cos(ang) * armLen, Math.sin(ang) * armLen);
+        ctx.stroke();
+        const bx = Math.cos(ang) * armLen * 0.6;
+        const by = Math.sin(ang) * armLen * 0.6;
+        for (const sign of [-1, 1]) {
+          const ba = ang + sign * Math.PI / 5;
+          ctx.beginPath();
+          ctx.moveTo(bx, by);
+          ctx.lineTo(bx + Math.cos(ba) * armLen * 0.3, by + Math.sin(ba) * armLen * 0.3);
+          ctx.stroke();
+        }
+      }
+      ctx.beginPath();
+      ctx.arc(0, 0, iconSize * 0.14, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(220, 240, 255, 0.98)';
+      ctx.fill();
+    }
+
+    ctx.restore();
+  }
+}
+
+  else if (objName === 'mind') {
+    // a rotating golden ring with 4 segments
+    ctx.rotate(state.objectPulse * 0.15);
+    const colors = [
+      [255, 180, 210], [255, 220, 120], [210, 100, 60], [180, 200, 230]
+    ];
+    for (let i = 0; i < 4; i++) {
+      ctx.beginPath();
+      ctx.strokeStyle = rgba(colors[i], 0.9);
+      ctx.lineWidth = 3 * DPR;
+      ctx.arc(0, 0, 110 * DPR, (i / 4) * Math.PI * 2, ((i + 1) / 4) * Math.PI * 2);
+      ctx.stroke();
+    }
+    const g = ctx.createRadialGradient(0, 0, 0, 0, 0, 90 * DPR);
+    g.addColorStop(0, 'rgba(255,240,200,0.45)');
+    g.addColorStop(1, 'rgba(255,240,200,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(0, 0, 90 * DPR, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+
+  else if (objName === 'butterflies') {
+    // a swarm of butterflies in a slow spiral
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * Math.PI * 2 + state.objectPulse * 0.4;
+      const r = (60 + i * 12) * DPR;
+      const bx = Math.cos(a) * r;
+      const by = Math.sin(a) * r * 0.5;
+      ctx.save();
+      ctx.translate(bx, by);
+      ctx.rotate(a);
+      const hue = 290 + (i * 15) % 60;
+      ctx.fillStyle = `hsla(${hue}, 80%, 75%, 0.85)`;
+      ctx.beginPath();
+      ctx.ellipse(-6 * DPR, 0, 8 * DPR, 5 * DPR, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.ellipse(6 * DPR, 0, 8 * DPR, 5 * DPR, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  else if (objName === 'sun') {
+    // blazing sun spirit
+    const g = ctx.createRadialGradient(0, 0, 0, 0, 0, 140 * DPR);
+    g.addColorStop(0, 'rgba(255,240,180,0.9)');
+    g.addColorStop(0.3, 'rgba(255,190,90,0.6)');
+    g.addColorStop(1, 'rgba(255,150,60,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(0, 0, 140 * DPR, 0, Math.PI * 2);
+    ctx.fill();
+
+    // rays
+    ctx.strokeStyle = 'rgba(255,220,140,0.7)';
+    ctx.lineWidth = 3 * DPR;
+    for (let i = 0; i < 24; i++) {
+      const a = (i / 24) * Math.PI * 2 + state.objectPulse * 0.3;
+      const r1 = 60 * DPR, r2 = 100 * DPR + Math.sin(i) * 12 * DPR;
+      ctx.beginPath();
+      ctx.moveTo(Math.cos(a) * r1, Math.sin(a) * r1);
+      ctx.lineTo(Math.cos(a) * r2, Math.sin(a) * r2);
+      ctx.stroke();
+    }
+  }
+
+  else if (objName === 'honey') {
+    // golden honey drops suspended in air
+    for (let i = 0; i < 14; i++) {
+      const a = (i / 14) * Math.PI * 2 + state.objectPulse * 0.5;
+      const r = (50 + i * 6) * DPR;
+      const hx = Math.cos(a) * r;
+      const hy = Math.sin(a) * r * 0.6 - Math.sin(state.objectPulse * 2 + i) * 8 * DPR;
+      const g = ctx.createRadialGradient(hx, hy, 0, hx, hy, 14 * DPR);
+      g.addColorStop(0, 'rgba(255,230,130,0.95)');
+      g.addColorStop(0.6, 'rgba(255,180,70,0.6)');
+      g.addColorStop(1, 'rgba(255,180,70,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(hx, hy, 14 * DPR, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  else if (objName === 'dreamcloud') {
+    // drifting dream clouds that form shapes
+    for (let i = 0; i < 5; i++) {
+      const dx = (i - 2) * 80 * DPR + Math.sin(state.objectPulse * 0.4 + i) * 20 * DPR;
+      const dy = -30 * DPR + Math.cos(state.objectPulse * 0.5 + i) * 15 * DPR;
+      const g = ctx.createRadialGradient(dx, dy, 0, dx, dy, 70 * DPR);
+      g.addColorStop(0, 'rgba(220,225,255,0.5)');
+      g.addColorStop(1, 'rgba(220,225,255,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(dx, dy, 70 * DPR, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  else if (objName === 'cove') {
+    // a mirrored lake with soft ripples
+    ctx.save();
+    ctx.translate(0, 100 * DPR);
+    const g = ctx.createLinearGradient(0, -30 * DPR, 0, 60 * DPR);
+    g.addColorStop(0, 'rgba(180,220,255,0.5)');
+    g.addColorStop(1, 'rgba(120,180,230,0.1)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 180 * DPR, 45 * DPR, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // ripples
+    for (let r = 0; r < 4; r++) {
+      const rr = ((state.objectPulse * 40 + r * 40) % 160) * DPR;
+      ctx.strokeStyle = `rgba(220,240,255,${0.4 - rr / (200 * DPR)})`;
+      ctx.lineWidth = 1.5 * DPR;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, rr, rr * 0.25, 0, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+ 
+
+  
+
+  else if (objName === 'mist') {
+    // drifting spirit mist
+    for (let i = 0; i < 20; i++) {
+      const a = (i / 20) * Math.PI * 2 + state.objectPulse * 0.2;
+      const r = (40 + i * 10) * DPR;
+      const mx = Math.cos(a) * r;
+      const my = Math.sin(a) * r * 0.55;
+      const g = ctx.createRadialGradient(mx, my, 0, mx, my, 50 * DPR);
+      g.addColorStop(0, 'rgba(200,180,160,0.35)');
+      g.addColorStop(1, 'rgba(200,180,160,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(mx, my, 50 * DPR, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  else if (objName === 'brook') {
+    // a silver ribbon of water
+    ctx.strokeStyle = 'rgba(210,230,255,0.85)';
+    ctx.lineWidth = 12 * DPR;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(-180 * DPR, 40 * DPR);
+    for (let x = -180 * DPR; x <= 180 * DPR; x += 20 * DPR) {
+      const y = 40 * DPR + Math.sin(x * 0.02 + state.objectPulse * 2) * 12 * DPR;
+      ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+    ctx.lineWidth = 3 * DPR;
+    ctx.beginPath();
+    ctx.moveTo(-180 * DPR, 40 * DPR);
+    for (let x = -180 * DPR; x <= 180 * DPR; x += 20 * DPR) {
+      const y = 40 * DPR + Math.sin(x * 0.02 + state.objectPulse * 2) * 12 * DPR - 4 * DPR;
+      ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  }
+
+  else if (objName === 'wraith') {
+    // THE WINTER WRAITH — grim, tall, hooded
+    ctx.save();
+    ctx.globalAlpha *= 0.85;
+    // aura of cold
+    const ag = ctx.createRadialGradient(0, 0, 0, 0, 0, 220 * DPR);
+    ag.addColorStop(0, 'rgba(120,140,170,0.35)');
+    ag.addColorStop(0.5, 'rgba(80,95,130,0.15)');
+    ag.addColorStop(1, 'rgba(40,50,80,0)');
+    ctx.fillStyle = ag;
+    ctx.beginPath();
+    ctx.arc(0, 0, 220 * DPR, 0, Math.PI * 2);
+    ctx.fill();
+
+    // billowing cloak
+    ctx.beginPath();
+    ctx.moveTo(0, -120 * DPR);
+    ctx.bezierCurveTo(-90 * DPR, -80 * DPR, -140 * DPR, 60 * DPR, -110 * DPR, 160 * DPR);
+    ctx.lineTo(110 * DPR, 160 * DPR);
+    ctx.bezierCurveTo(140 * DPR, 60 * DPR, 90 * DPR, -80 * DPR, 0, -120 * DPR);
+    const cg = ctx.createLinearGradient(0, -120 * DPR, 0, 160 * DPR);
+    cg.addColorStop(0, 'rgba(20,25,40,0.95)');
+    cg.addColorStop(0.6, 'rgba(15,18,30,0.9)');
+    cg.addColorStop(1, 'rgba(10,12,22,0.6)');
+    ctx.fillStyle = cg;
+    ctx.fill();
+
+    // hood
+    ctx.beginPath();
+    ctx.moveTo(0, -150 * DPR);
+    ctx.bezierCurveTo(-40 * DPR, -140 * DPR, -45 * DPR, -90 * DPR, -35 * DPR, -60 * DPR);
+    ctx.lineTo(35 * DPR, -60 * DPR);
+    ctx.bezierCurveTo(45 * DPR, -90 * DPR, 40 * DPR, -140 * DPR, 0, -150 * DPR);
+    ctx.fillStyle = 'rgba(8,10,18,0.98)';
+    ctx.fill();
+
+    // glowing eyes
+    const eyeGlow = 0.7 + Math.sin(state.objectPulse * 3) * 0.3;
+    for (const side of [-1, 1]) {
+      const ex = side * 12 * DPR;
+      const ey = -105 * DPR;
+      const eg = ctx.createRadialGradient(ex, ey, 0, ex, ey, 14 * DPR);
+      eg.addColorStop(0, `rgba(200,230,255,${eyeGlow})`);
+      eg.addColorStop(0.4, `rgba(140,180,230,${eyeGlow * 0.6})`);
+      eg.addColorStop(1, 'rgba(140,180,230,0)');
+      ctx.fillStyle = eg;
+      ctx.beginPath();
+      ctx.arc(ex, ey, 14 * DPR, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = `rgba(220,240,255,${eyeGlow})`;
+      ctx.beginPath();
+      ctx.arc(ex, ey, 3 * DPR, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // skeletal hands reaching
+    ctx.strokeStyle = 'rgba(200,210,230,0.7)';
+    ctx.lineWidth = 3 * DPR;
+    for (const side of [-1, 1]) {
+      ctx.beginPath();
+      ctx.moveTo(side * 70 * DPR, -20 * DPR);
+      ctx.lineTo(side * 130 * DPR, 40 * DPR);
+      ctx.stroke();
+      // fingers
+      for (let f = 0; f < 4; f++) {
+        ctx.beginPath();
+        ctx.moveTo(side * 130 * DPR, 40 * DPR);
+        ctx.lineTo(side * (140 + f * 5) * DPR, (55 + f * 8) * DPR);
+        ctx.stroke();
+      }
+    }
+
+    ctx.restore();
+  }
+
+  else if (objName === 'dissolution') {
+    // radiant white light — the mortal nature dissolving
+    const g = ctx.createRadialGradient(0, 0, 0, 0, 0, 280 * DPR);
+    g.addColorStop(0, 'rgba(255,255,255,0.9)');
+    g.addColorStop(0.4, 'rgba(255,255,255,0.5)');
+    g.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(0, 0, 280 * DPR, 0, Math.PI * 2);
+    ctx.fill();
+
+    // rising feathers of light
+    for (let i = 0; i < 20; i++) {
+      const a = (i / 20) * Math.PI * 2 + state.objectPulse * 0.3;
+      const r = (60 + Math.sin(state.objectPulse * 2 + i) * 40) * DPR;
+      const fx = Math.cos(a) * r;
+      const fy = Math.sin(a) * r - state.objectPulse * 15 * DPR;
+      ctx.fillStyle = `rgba(255,255,255,${0.5 - i * 0.015})`;
+      ctx.beginPath();
+      ctx.ellipse(fx, fy, 3 * DPR, 10 * DPR, a, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  ctx.restore();
+}
+
+/* ---------- PARTICLE UPDATES ---------- */
+/* ============================================================
+   THOUGHTS — four season clouds inside the knight's head
+   Each cloud blinks, pulses, and fades
+   ============================================================ */
+function drawThoughts() {
+  const dur = LINES[state.line].dur;
+  const t   = state.t / dur;
+
+  // cloud slots appear between 40% and 100% of the line
+  if (t < 0.4) return;
+
+  const local = (t - 0.4) / 0.6;   // 0..1 inside thought phase
+
+  // 4 clouds, each has its own time window
+  const clouds = [
+    { name: 'Spring', color: [255, 180, 210], icon: 'flower', dx: -80, dy: -80 },
+    { name: 'Summer', color: [255, 220, 120], icon: 'sun',    dx:  80, dy: -80 },
+    { name: 'Autumn', color: [210, 110,  60], icon: 'leaf',   dx: -80, dy:  30 },
+    { name: 'Winter', color: [170, 200, 230], icon: 'snow',   dx:  80, dy:  30 }
+  ];
+
+  // head position in world coords (same as in drawCharacter)
+  const headX = W * 0.5;
+  const headY = H * 0.78 - 62 * DPR * 1.4 - 80 * DPR * 1.4;
+
+  // total window for each cloud: 0.25 of local time, staggered
+  const windowDur = 0.22;
+  const stagger   = (1 - windowDur) / 3; // 3 gaps over 4 clouds
+
+  for (let i = 0; i < 4; i++) {
+    const c = clouds[i];
+    const startT = i * stagger;
+    const endT   = startT + windowDur;
+
+    if (local < startT || local > endT) continue;
+
+    const k = (local - startT) / windowDur; // 0..1 inside window
+
+    // fade in 0–25%, hold 25–60%, fade out 60–100%
+    let alpha;
+    if (k < 0.25) alpha = k / 0.25;
+    else if (k < 0.6) alpha = 1;
+    else alpha = 1 - (k - 0.6) / 0.4;
+
+    // gentle float
+    const floatY = Math.sin(state.objectPulse * 2 + i) * 6 * DPR;
+    const floatX = Math.cos(state.objectPulse * 1.4 + i) * 4 * DPR;
+
+    const cx = headX + c.dx * DPR + floatX;
+    const cy = headY + c.dy * DPR + floatY;
+    const R  = 42 * DPR;
+
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.translate(cx, cy);
+
+    // ---- cloud silhouette (3 overlapping puffs) ----
+    ctx.beginPath();
+    ctx.arc(-R * 0.45, -R * 0.1,  R * 0.55, 0, Math.PI * 2);
+    ctx.arc( R * 0.45, -R * 0.1,  R * 0.55, 0, Math.PI * 2);
+    ctx.arc( 0,        -R * 0.5,  R * 0.7,  0, Math.PI * 2);
+    ctx.arc( 0,         R * 0.2,  R * 0.75, 0, Math.PI * 2);
+    const cloudGrad = ctx.createRadialGradient(0, -R * 0.2, 0, 0, 0, R * 1.4);
+    cloudGrad.addColorStop(0, rgba(c.color, 0.85));
+    cloudGrad.addColorStop(0.6, rgba(c.color, 0.5));
+    cloudGrad.addColorStop(1, rgba(c.color, 0));
+    ctx.fillStyle = cloudGrad;
+    ctx.fill();
+
+    // ---- soft outline ----
+    ctx.strokeStyle = rgba(c.color, 0.9 * alpha);
+    ctx.lineWidth = 1.4 * DPR;
+    ctx.beginPath();
+    ctx.arc(0, 0, R * 1.05, 0, Math.PI * 2);
+    ctx.stroke();
+
+    
+    // ---- icon inside ----
+    const iconSize = 18 * DPR;
+    const pulse = 1 + Math.sin(state.objectPulse * 3 + i) * 0.08;
+    ctx.scale(pulse, pulse);
+
+    if (c.icon === 'flower') {
+      for (let p = 0; p < 6; p++) {
+        const pa = (p / 6) * Math.PI * 2;
+        ctx.beginPath();
+        ctx.arc(Math.cos(pa) * iconSize * 0.55, Math.sin(pa) * iconSize * 0.55, iconSize * 0.34, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(255, 200, 225, 0.98)';
+        ctx.fill();
+      }
+      ctx.beginPath();
+      ctx.arc(0, 0, iconSize * 0.3, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255, 230, 120, 1)';
+      ctx.fill();
+    }
+    else if (c.icon === 'sun') {
+      ctx.strokeStyle = 'rgba(255, 220, 130, 0.98)';
+      ctx.lineWidth = 1.6 * DPR;
+      ctx.lineCap = 'round';
+      for (let r = 0; r < 10; r++) {
+        const ra = (r / 10) * Math.PI * 2;
+        ctx.beginPath();
+        ctx.moveTo(Math.cos(ra) * iconSize * 0.8, Math.sin(ra) * iconSize * 0.8);
+        ctx.lineTo(Math.cos(ra) * iconSize * 1.05, Math.sin(ra) * iconSize * 1.05);
+        ctx.stroke();
+      }
+      ctx.beginPath();
+      ctx.arc(0, 0, iconSize * 0.65, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255, 235, 130, 1)';
+      ctx.fill();
+    }
+    else if (c.icon === 'leaf') {
+      ctx.fillStyle = 'rgba(220, 110, 55, 0.98)';
+      const RR = iconSize * 0.9;
+      const pts = [
+        [0, -RR], [RR*0.22, -RR*0.42], [RR*0.75, -RR*0.62], [RR*0.42, -RR*0.14],
+        [RR*0.95, RR*0.08], [RR*0.35, RR*0.22], [RR*0.5, RR*0.7], [0, RR*0.42],
+        [-RR*0.5, RR*0.7], [-RR*0.35, RR*0.22], [-RR*0.95, RR*0.08],
+        [-RR*0.42, -RR*0.14], [-RR*0.75, -RR*0.62], [-RR*0.22, -RR*0.42]
+      ];
+      ctx.beginPath();
+      ctx.moveTo(pts[0][0], pts[0][1]);
+      for (let kk = 1; kk < pts.length; kk++) ctx.lineTo(pts[kk][0], pts[kk][1]);
+      ctx.closePath();
+      ctx.fill();
+    }
+    else if (c.icon === 'snow') {
+      ctx.strokeStyle = 'rgba(200, 225, 250, 0.98)';
+      ctx.lineWidth = 1.6 * DPR;
+      ctx.lineCap = 'round';
+      const armLen = iconSize * 0.85;
+      for (let a = 0; a < 6; a++) {
+        const ang = (a / 6) * Math.PI * 2;
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(Math.cos(ang) * armLen, Math.sin(ang) * armLen);
+        ctx.stroke();
+        const bx = Math.cos(ang) * armLen * 0.6;
+        const by = Math.sin(ang) * armLen * 0.6;
+        for (const sgn of [-1, 1]) {
+          const ba = ang + sgn * Math.PI / 5;
+          ctx.beginPath();
+          ctx.moveTo(bx, by);
+          ctx.lineTo(bx + Math.cos(ba) * armLen * 0.3, by + Math.sin(ba) * armLen * 0.3);
+          ctx.stroke();
+        }
+      }
+      ctx.beginPath();
+      ctx.arc(0, 0, iconSize * 0.14, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(220, 240, 255, 1)';
+      ctx.fill();
+    }
+
+    ctx.restore();
+  }
+}
+/* ============================================================
+   CLOUD DREAMS — clouds that form dream shapes
+   ============================================================ */
+function drawCloudDreams() {
+  const alpha = state.cloudDreamAlpha;
+  if (alpha <= 0.01) return;
+
+  const stage = state.cloudDreamStage;   // 0..1
+
+  ctx.save();
+  ctx.globalAlpha = alpha;
+
+  // --- base: drifting clouds ---
+  for (let i = 0; i < 8; i++) {
+    const cx = ((i * 220) % W) + Math.sin(state.objectPulse * 0.3 + i) * 30 * DPR;
+    const cy = H * 0.12 + (i % 3) * 40 * DPR + Math.cos(state.objectPulse * 0.4 + i) * 15 * DPR;
+    const R  = (60 + (i % 4) * 20) * DPR;
+
+    const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, R);
+    g.addColorStop(0,   'rgba(255, 255, 255, 0.55)');
+    g.addColorStop(0.6, 'rgba(245, 240, 255, 0.25)');
+    g.addColorStop(1,   'rgba(245, 240, 255, 0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(cx, cy, R, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // --- second layer: shapes emerge ---
+  // shapes appear as stage → 1
+  const shapeAlpha = Math.min(1, stage * 1.4);
+
+  // 1) a face (silhouette of a woman)
+  {
+    const x = W * 0.28;
+    const y = H * 0.15;
+    ctx.globalAlpha = alpha * shapeAlpha * 0.9;
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.55)';
+
+    // head
+    ctx.beginPath();
+    ctx.ellipse(x, y, 30 * DPR, 38 * DPR, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // hair (flowing)
+    ctx.beginPath();
+    ctx.moveTo(x - 28 * DPR, y - 10 * DPR);
+    ctx.quadraticCurveTo(x - 55 * DPR, y + 15 * DPR, x - 45 * DPR, y + 55 * DPR);
+    ctx.quadraticCurveTo(x - 30 * DPR, y + 60 * DPR, x - 20 * DPR, y + 30 * DPR);
+    ctx.closePath();
+    ctx.fill();
+    // suggestion of face profile (side)
+    ctx.globalAlpha = alpha * shapeAlpha * 0.5;
+    ctx.fillStyle = 'rgba(200, 200, 230, 0.7)';
+    ctx.beginPath();
+    ctx.ellipse(x + 8 * DPR, y + 5 * DPR, 4 * DPR, 3 * DPR, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // 2) a castle on a hill
+  {
+    const x = W * 0.65;
+    const y = H * 0.22;
+    ctx.globalAlpha = alpha * shapeAlpha * 0.85;
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+
+    // hill
+    ctx.beginPath();
+    ctx.moveTo(x - 90 * DPR, y + 30 * DPR);
+    ctx.quadraticCurveTo(x, y - 30 * DPR, x + 90 * DPR, y + 30 * DPR);
+    ctx.closePath();
+    ctx.fill();
+
+    // castle body
+    ctx.fillRect(x - 30 * DPR, y - 30 * DPR, 60 * DPR, 40 * DPR);
+    // towers
+    ctx.fillRect(x - 42 * DPR, y - 50 * DPR, 12 * DPR, 50 * DPR);
+    ctx.fillRect(x + 30 * DPR, y - 50 * DPR, 12 * DPR, 50 * DPR);
+    // central tower
+    ctx.fillRect(x - 8 * DPR, y - 60 * DPR, 16 * DPR, 60 * DPR);
+    // spire
+    ctx.beginPath();
+    ctx.moveTo(x - 10 * DPR, y - 60 * DPR);
+    ctx.lineTo(x, y - 85 * DPR);
+    ctx.lineTo(x + 10 * DPR, y - 60 * DPR);
+    ctx.closePath();
+    ctx.fill();
+    // side towers spires
+    ctx.beginPath();
+    ctx.moveTo(x - 42 * DPR, y - 50 * DPR);
+    ctx.lineTo(x - 36 * DPR, y - 68 * DPR);
+    ctx.lineTo(x - 30 * DPR, y - 50 * DPR);
+    ctx.closePath();
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(x + 30 * DPR, y - 50 * DPR);
+    ctx.lineTo(x + 36 * DPR, y - 68 * DPR);
+    ctx.lineTo(x + 42 * DPR, y - 50 * DPR);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  // 3) a sailing ship in the sky
+  {
+    const x = W * 0.45;
+    const y = H * 0.08;
+    ctx.globalAlpha = alpha * shapeAlpha * 0.8;
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.55)';
+
+    // hull
+    ctx.beginPath();
+    ctx.moveTo(x - 50 * DPR, y + 15 * DPR);
+    ctx.quadraticCurveTo(x, y + 40 * DPR, x + 50 * DPR, y + 15 * DPR);
+    ctx.lineTo(x + 40 * DPR, y + 5 * DPR);
+    ctx.lineTo(x - 40 * DPR, y + 5 * DPR);
+    ctx.closePath();
+    ctx.fill();
+    // mast
+    ctx.fillRect(x - 1 * DPR, y - 50 * DPR, 2 * DPR, 60 * DPR);
+    // sails
+    ctx.beginPath();
+    ctx.moveTo(x + 2 * DPR, y - 48 * DPR);
+    ctx.quadraticCurveTo(x + 40 * DPR, y - 20 * DPR, x + 2 * DPR, y - 5 * DPR);
+    ctx.closePath();
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(x - 2 * DPR, y - 45 * DPR);
+    ctx.quadraticCurveTo(x - 30 * DPR, y - 25 * DPR, x - 2 * DPR, y - 10 * DPR);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  // 4) a knight on a horse (small silhouette top-right)
+  {
+    const x = W * 0.85;
+    const y = H * 0.10;
+    ctx.globalAlpha = alpha * shapeAlpha * 0.7;
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+
+    // horse body
+    ctx.beginPath();
+    ctx.ellipse(x, y + 15 * DPR, 35 * DPR, 15 * DPR, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // horse neck
+    ctx.beginPath();
+    ctx.moveTo(x + 25 * DPR, y + 5 * DPR);
+    ctx.lineTo(x + 45 * DPR, y - 15 * DPR);
+    ctx.lineTo(x + 50 * DPR, y - 5 * DPR);
+    ctx.lineTo(x + 30 * DPR, y + 12 * DPR);
+    ctx.closePath();
+    ctx.fill();
+    // horse legs
+    for (const lx of [-20, -5, 10, 25]) {
+      ctx.fillRect(x + lx * DPR, y + 25 * DPR, 4 * DPR, 18 * DPR);
+    }
+    // knight (simple rider shape)
+    ctx.beginPath();
+    ctx.arc(x, y - 8 * DPR, 8 * DPR, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillRect(x - 8 * DPR, y - 2 * DPR, 16 * DPR, 15 * DPR);
+    // spear
+    ctx.fillRect(x + 10 * DPR, y - 30 * DPR, 2 * DPR, 40 * DPR);
+  }
+
+  // 5) a heart / embrace shape (two figures)
+  {
+    const x = W * 0.15;
+    const y = H * 0.20;
+    ctx.globalAlpha = alpha * shapeAlpha * 0.65;
+    ctx.fillStyle = 'rgba(255, 230, 240, 0.6)';
+    ctx.beginPath();
+    ctx.ellipse(x, y, 25 * DPR, 30 * DPR, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(x + 40 * DPR, y, 25 * DPR, 30 * DPR, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // hug silhouette between them
+    ctx.fillStyle = 'rgba(255, 210, 230, 0.7)';
+    ctx.beginPath();
+    ctx.arc(x + 20 * DPR, y - 5 * DPR, 8 * DPR, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  ctx.restore();
+}
+/* ============================================================
+   HONEY JARS — many jars scattered around the knight
+   ============================================================ */
+function drawHoneyJars() {
+  const alpha = state.honeyJarAlpha;
+  if (alpha <= 0.01) return;
+
+  const groundY = H * 0.78;
+  const knightX = W * 0.5;
+
+  // Фиксированный набор банок: позиции предсказуемые, но с лёгким покачиванием
+  // { dx: от центра, dy: высота над землёй, scale: размер, type: тип банки }
+  const jars = [
+    { dx: -260, dy: 0,   scale: 1.1, type: 'pot'  },
+    { dx: -180, dy: 0,   scale: 0.9, type: 'jar'  },
+    { dx: -110, dy: 8,   scale: 0.8, type: 'jug'  },
+    { dx:  -60, dy: 0,   scale: 1.0, type: 'pot'  },
+    { dx:   80, dy: 0,   scale: 0.85,type: 'jar'  },
+    { dx:  140, dy: 0,   scale: 1.15,type: 'jug'  },
+    { dx:  220, dy: 6,   scale: 0.95,type: 'pot'  },
+    { dx:  300, dy: 0,   scale: 0.8, type: 'jar'  },
+    { dx:  -30, dy: 60,  scale: 0.7, type: 'jar'  },  // висит в воздухе
+    { dx:  190, dy: 40,  scale: 0.6, type: 'jug'  }
+  ];
+
+  for (let i = 0; i < jars.length; i++) {
+    const j = jars[i];
+
+    // лёгкое покачивание
+    const bob = Math.sin(state.objectPulse * 1.2 + i * 1.5) * 3;
+    const x = knightX + j.dx * DPR;
+    const y = groundY - j.dy * DPR + bob;
+    const s = j.scale * DPR;
+
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.translate(x, y);
+
+    // ---- small shelf / tray under the jar ----
+    if (j.dy === 0) {
+      // jar on the ground — add a wooden disc under it
+      ctx.fillStyle = 'rgba(80, 50, 25, 0.85)';
+      ctx.beginPath();
+      ctx.ellipse(0, 6 * s, 22 * s, 5 * s, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(40, 25, 12, 0.9)';
+      ctx.lineWidth = 1 * s;
+      ctx.stroke();
+    }
+
+    // ---- jar body ----
+    if (j.type === 'pot') {
+      // широкая глиняная банка
+      const w = 22 * s;
+      const h = 30 * s;
+      // body
+      ctx.beginPath();
+      ctx.moveTo(-w * 0.7, -h);
+      ctx.quadraticCurveTo(-w, -h * 0.4, -w * 0.85, 0);
+      ctx.quadraticCurveTo(-w * 0.5, 6 * s, 0, 6 * s);
+      ctx.quadraticCurveTo( w * 0.5, 6 * s,  w * 0.85, 0);
+      ctx.quadraticCurveTo( w, -h * 0.4,  w * 0.7, -h);
+      ctx.closePath();
+      const bodyGrad = ctx.createLinearGradient(-w, 0, w, 0);
+      bodyGrad.addColorStop(0,   '#8a5020');
+      bodyGrad.addColorStop(0.4, '#d08030');
+      bodyGrad.addColorStop(0.7, '#f0a040');
+      bodyGrad.addColorStop(1,   '#8a5020');
+      ctx.fillStyle = bodyGrad;
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(40, 20, 8, 0.9)';
+      ctx.lineWidth = 1.2 * s;
+      ctx.stroke();
+      // honey label
+      ctx.fillStyle = 'rgba(255, 240, 200, 0.9)';
+      ctx.fillRect(-w * 0.55, -h * 0.65, w * 1.1, h * 0.35);
+      ctx.strokeStyle = 'rgba(120, 80, 20, 0.9)';
+      ctx.lineWidth = 0.6 * s;
+      ctx.strokeRect(-w * 0.55, -h * 0.65, w * 1.1, h * 0.35);
+      // small honeycomb icon on label
+      ctx.fillStyle = 'rgba(220, 160, 60, 0.95)';
+      for (let r = 0; r < 2; r++) {
+        for (let c = 0; c < 3; c++) {
+          ctx.beginPath();
+          ctx.arc(-w * 0.35 + c * 4 * s, -h * 0.5 + r * 4 * s, 1.4 * s, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+      // lid
+      ctx.fillStyle = '#5a3010';
+      ctx.beginPath();
+      ctx.ellipse(0, -h, w * 0.72, 3 * s, 0, 0, Math.PI * 2);
+      ctx.fill();
+      // drips of honey on the rim
+      ctx.fillStyle = 'rgba(255, 200, 60, 0.9)';
+      ctx.beginPath();
+      ctx.moveTo(w * 0.5, -h);
+      ctx.quadraticCurveTo(w * 0.6, -h + 8 * s, w * 0.45, -h + 12 * s);
+      ctx.quadraticCurveTo(w * 0.35, -h + 4 * s, w * 0.4, -h);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    else if (j.type === 'jar') {
+      // стеклянная банка с мёдом (видно содержимое)
+      const w = 18 * s;
+      const h = 26 * s;
+      // glass silhouette
+      ctx.beginPath();
+      ctx.moveTo(-w * 0.7, -h * 0.85);
+      ctx.lineTo( w * 0.7, -h * 0.85);
+      ctx.lineTo( w,      0);
+      ctx.quadraticCurveTo( w * 0.6, 6 * s, 0, 6 * s);
+      ctx.quadraticCurveTo(-w * 0.6, 6 * s, -w, 0);
+      ctx.closePath();
+      // honey content
+      const honeyGrad = ctx.createLinearGradient(0, -h * 0.5, 0, 0);
+      honeyGrad.addColorStop(0, 'rgba(255, 210, 90, 0.85)');
+      honeyGrad.addColorStop(1, 'rgba(200, 130, 30, 0.95)');
+      ctx.fillStyle = honeyGrad;
+      ctx.fill();
+      // glass outline
+      ctx.strokeStyle = 'rgba(220, 240, 255, 0.7)';
+      ctx.lineWidth = 1.4 * s;
+      ctx.stroke();
+      // glass shine
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
+      ctx.lineWidth = 0.8 * s;
+      ctx.beginPath();
+      ctx.moveTo(-w * 0.4, -h * 0.6);
+      ctx.lineTo(-w * 0.4, -h * 0.05);
+      ctx.stroke();
+      // lid
+      ctx.fillStyle = '#4a2a10';
+      ctx.fillRect(-w * 0.8, -h * 0.98, w * 1.6, h * 0.15);
+      ctx.strokeStyle = '#1a0a04';
+      ctx.lineWidth = 0.6 * s;
+      ctx.strokeRect(-w * 0.8, -h * 0.98, w * 1.6, h * 0.15);
+    }
+
+    else if (j.type === 'jug') {
+      // кувшин с мёдом
+      const w = 16 * s;
+      const h = 34 * s;
+      // body
+      ctx.beginPath();
+      ctx.moveTo(-w * 0.4, -h);
+      ctx.lineTo( w * 0.4, -h);
+      ctx.quadraticCurveTo( w, -h * 0.5, w * 0.85, 0);
+      ctx.quadraticCurveTo( w * 0.5, 6 * s, 0, 6 * s);
+      ctx.quadraticCurveTo(-w * 0.5, 6 * s, -w * 0.85, 0);
+      ctx.quadraticCurveTo(-w, -h * 0.5, -w * 0.4, -h);
+      ctx.closePath();
+      const g = ctx.createLinearGradient(-w, 0, w, 0);
+      g.addColorStop(0,   '#7a4010');
+      g.addColorStop(0.4, '#c87820');
+      g.addColorStop(0.7, '#e89a30');
+      g.addColorStop(1,   '#7a4010');
+      ctx.fillStyle = g;
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(40, 20, 8, 0.9)';
+      ctx.lineWidth = 1.2 * s;
+      ctx.stroke();
+      // neck & spout
+      ctx.fillStyle = '#5a3010';
+      ctx.fillRect(-w * 0.35, -h - 6 * s, w * 0.7, 6 * s);
+      // handle
+      ctx.strokeStyle = '#5a3010';
+      ctx.lineWidth = 2.5 * s;
+      ctx.beginPath();
+      ctx.arc(w * 0.9, -h * 0.55, 8 * s, -Math.PI * 0.5, Math.PI * 0.5);
+      ctx.stroke();
+      // honey drip on the spout
+      ctx.fillStyle = 'rgba(255, 200, 60, 0.95)';
+      ctx.beginPath();
+      ctx.arc(0, -h - 4 * s, 2 * s, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    ctx.restore();
+  }
+}
+/* ============================================================
+   WOLF HOWLING on a hill — winter only
+   ============================================================ */
+function drawWolf(season) {
+  // появляется только на строке XIII
+  if (LINES[state.line].object !== 'wraith') return;
+
+  const dur = LINES[state.line].dur;
+  const t   = state.t / dur;
+
+  // появляется в 0–30%, держится до конца
+  let alpha;
+  if (t < 0.3) alpha = t / 0.3;
+  else alpha = 1;
+
+  // волк на правом холме
+  const wx = W * 0.82;
+  const wy = H * 0.70;   // чуть выше линии земли
+
+  ctx.save();
+  ctx.globalAlpha = alpha * 0.85;
+
+  // ---- hill silhouette ----
+  ctx.fillStyle = 'rgba(40, 45, 65, 0.9)';
+  ctx.beginPath();
+  ctx.moveTo(wx - 140 * DPR, wy + 40 * DPR);
+  ctx.quadraticCurveTo(wx, wy - 50 * DPR, wx + 140 * DPR, wy + 40 * DPR);
+  ctx.closePath();
+  ctx.fill();
+
+  // ---- wolf silhouette on top of the hill ----
+  const scale = 1.2;
+  ctx.save();
+  ctx.translate(wx, wy - 15 * DPR);
+  ctx.scale(scale * DPR * 0.6, scale * DPR * 0.6);
+
+  // Лунная подсветка волка
+  ctx.fillStyle = 'rgba(15, 18, 28, 0.98)';
+
+  // ---- body ----
+  ctx.beginPath();
+  ctx.ellipse(0, 0, 30, 14, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // ---- head tilted up (howling) ----
+  ctx.save();
+  ctx.translate(20, -8);
+  ctx.rotate(-0.55);   // наклон головы вверх
+
+  // head
+  ctx.beginPath();
+  ctx.ellipse(0, 0, 12, 8, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // snout pointing up
+  ctx.beginPath();
+  ctx.moveTo(6, -2);
+  ctx.lineTo(20, -14);
+  ctx.lineTo(20, -8);
+  ctx.lineTo(8, 4);
+  ctx.closePath();
+  ctx.fill();
+
+  // ear
+  ctx.beginPath();
+  ctx.moveTo(-4, -6);
+  ctx.lineTo(-8, -16);
+  ctx.lineTo(-1, -10);
+  ctx.closePath();
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(-9, -5);
+  ctx.lineTo(-14, -14);
+  ctx.lineTo(-6, -9);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.restore();
+
+  // ---- front legs ----
+  ctx.fillRect(-22, 10, 4, 18);
+  ctx.fillRect(-8,  10, 4, 18);
+
+  // ---- back legs ----
+  ctx.fillRect(18, 10, 4, 18);
+  ctx.fillRect(28, 10, 4, 18);
+
+  // ---- tail ----
+  ctx.beginPath();
+  ctx.moveTo(-28, -4);
+  ctx.quadraticCurveTo(-42, -8, -46, -20);
+  ctx.lineTo(-42, -22);
+  ctx.quadraticCurveTo(-36, -12, -28, -6);
+  ctx.closePath();
+  ctx.fill();
+
+  // ---- faint rim light from the moon ----
+  ctx.strokeStyle = 'rgba(200, 220, 255, 0.4)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.ellipse(0, 0, 30, 14, 0, -Math.PI * 0.7, Math.PI * 0.1);
+  ctx.stroke();
+
+  ctx.restore();
+
+  // ---- breath mist coming from the snout (winter) ----
+  const breathPhase = (state.objectPulse * 1.2) % 1;
+  const bx = wx + 14 * DPR;
+  const by = wy - 40 * DPR;
+  for (let i = 0; i < 3; i++) {
+    const bp = (breathPhase + i * 0.25) % 1;
+    const px = bx + Math.sin(bp * 6 + i) * 6 * DPR;
+    const py = by - bp * 40 * DPR;
+    const rad = (6 + bp * 20) * DPR;
+    const bg = ctx.createRadialGradient(px, py, 0, px, py, rad);
+    bg.addColorStop(0, `rgba(220, 230, 245, ${0.35 * (1 - bp) * alpha})`);
+    bg.addColorStop(1, 'rgba(220, 230, 245, 0)');
+    ctx.fillStyle = bg;
+    ctx.beginPath();
+    ctx.arc(px, py, rad, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // ---- moon glow behind the wolf ----
+  const mg = ctx.createRadialGradient(wx, wy - 60 * DPR, 0, wx, wy - 60 * DPR, 180 * DPR);
+  mg.addColorStop(0, `rgba(200, 220, 255, ${0.15 * alpha})`);
+  mg.addColorStop(1, 'rgba(200, 220, 255, 0)');
+  ctx.fillStyle = mg;
+  ctx.beginPath();
+  ctx.arc(wx, wy - 60 * DPR, 180 * DPR, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.restore();
+}
+/* ============================================================
+   CLIFF COVE — sea, cliffs, still water
+   ============================================================ */
+function drawCliffCove() {
+  const alpha = state.calmAlpha;
+  if (alpha <= 0.01) return;
+
+  const groundY = H * 0.78;
+  const horizon = H * 0.55;
+
+  ctx.save();
+  ctx.globalAlpha = alpha;
+
+  // ---- 1. SEA (занимает нижнюю половину — за скалами) ----
+  const seaGrad = ctx.createLinearGradient(0, horizon, 0, groundY);
+  seaGrad.addColorStop(0, 'rgba(120, 180, 220, 0.9)');
+  seaGrad.addColorStop(0.5, 'rgba(80, 140, 190, 0.95)');
+  seaGrad.addColorStop(1, 'rgba(50, 90, 140, 0.95)');
+  ctx.fillStyle = seaGrad;
+  ctx.fillRect(0, horizon, W, groundY - horizon);
+
+  // ---- 2. STILL HORIZON LINE (полная гладь) ----
+  ctx.strokeStyle = 'rgba(230, 240, 250, 0.6)';
+  ctx.lineWidth = 1.5 * DPR;
+  ctx.beginPath();
+  ctx.moveTo(0, horizon);
+  ctx.lineTo(W, horizon);
+  ctx.stroke();
+
+  // ---- 3. MIRROR REFLECTION of sky at horizon ----
+  const reflGrad = ctx.createLinearGradient(0, horizon, 0, horizon + 40 * DPR);
+  reflGrad.addColorStop(0, 'rgba(230, 235, 245, 0.45)');
+  reflGrad.addColorStop(1, 'rgba(120, 180, 220, 0)');
+  ctx.fillStyle = reflGrad;
+  ctx.fillRect(0, horizon, W, 40 * DPR);
+
+  // ---- 4. CLIFFS (right side, over the sea) ----
+  // дальний мыс
+  ctx.fillStyle = 'rgba(70, 70, 85, 0.95)';
+  ctx.beginPath();
+  ctx.moveTo(W * 0.65, groundY + 5);
+  ctx.lineTo(W * 0.72, horizon + 30 * DPR);
+  ctx.lineTo(W * 0.78, horizon + 20 * DPR);
+  ctx.lineTo(W * 0.85, horizon + 40 * DPR);
+  ctx.lineTo(W * 0.92, horizon + 10 * DPR);
+  ctx.lineTo(W, horizon + 25 * DPR);
+  ctx.lineTo(W, groundY + 5);
+  ctx.closePath();
+  ctx.fill();
+
+  // второй мыс (ближе, темнее)
+  ctx.fillStyle = 'rgba(40, 42, 55, 0.98)';
+  ctx.beginPath();
+  ctx.moveTo(W * 0.75, groundY + 5);
+  ctx.lineTo(W * 0.82, horizon + 60 * DPR);
+  ctx.lineTo(W * 0.88, horizon + 45 * DPR);
+  ctx.lineTo(W * 0.95, horizon + 70 * DPR);
+  ctx.lineTo(W, horizon + 50 * DPR);
+  ctx.lineTo(W, groundY + 5);
+  ctx.closePath();
+  ctx.fill();
+
+  // ---- 5. LEFT CLIFF (тот, на котором сидит рыцарь) ----
+  ctx.fillStyle = 'rgba(28, 28, 38, 1)';
+  ctx.beginPath();
+  ctx.moveTo(0, groundY + 5);
+  ctx.lineTo(0, horizon + 80 * DPR);
+  ctx.lineTo(W * 0.18, horizon + 60 * DPR);
+  ctx.lineTo(W * 0.28, horizon + 90 * DPR);
+  ctx.lineTo(W * 0.38, groundY + 5);
+  ctx.closePath();
+  ctx.fill();
+
+  // текстура скалы — вертикальные трещины
+  ctx.strokeStyle = 'rgba(15, 15, 22, 0.85)';
+  ctx.lineWidth = 1 * DPR;
+  for (let i = 0; i < 8; i++) {
+    const cx = W * 0.04 + i * W * 0.035;
+    const cy = horizon + 70 * DPR + i * 8 * DPR;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(cx + 6 * DPR, cy + 40 * DPR);
+    ctx.stroke();
+  }
+
+  // ---- 6. DISTANT SAILBOAT (крошечный, для масштаба) ----
+  const boatX = W * 0.6;
+  const boatY = horizon + 20 * DPR;
+  ctx.fillStyle = 'rgba(230, 220, 200, 0.7)';
+  // hull
+  ctx.beginPath();
+  ctx.moveTo(boatX - 8 * DPR, boatY);
+  ctx.lineTo(boatX + 8 * DPR, boatY);
+  ctx.lineTo(boatX + 5 * DPR, boatY + 3 * DPR);
+  ctx.lineTo(boatX - 5 * DPR, boatY + 3 * DPR);
+  ctx.closePath();
+  ctx.fill();
+  // sail
+  ctx.beginPath();
+  ctx.moveTo(boatX, boatY - 18 * DPR);
+  ctx.lineTo(boatX + 6 * DPR, boatY - 2 * DPR);
+  ctx.lineTo(boatX, boatY - 2 * DPR);
+  ctx.closePath();
+  ctx.fill();
+
+  // ---- 7. STILLNESS — легкое серебряное дрожание глади ----
+  const glintPhase = state.objectPulse * 0.4;
+  for (let i = 0; i < 8; i++) {
+    const gx = ((i * 173) % W);
+    const gy = horizon + 30 * DPR + (i % 3) * 15 * DPR;
+    const glint = Math.max(0, Math.sin(glintPhase + i * 1.3));
+    if (glint < 0.3) continue;
+    ctx.fillStyle = `rgba(240, 250, 255, ${glint * 0.35})`;
+    ctx.beginPath();
+    ctx.ellipse(gx, gy, 20 * DPR * glint, 1 * DPR, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // ---- 8. NO WIND — облака висят неподвижно ----
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+  for (let i = 0; i < 4; i++) {
+    const cx = W * (0.15 + i * 0.2);
+    const cy = H * 0.15 + (i % 2) * 30 * DPR;
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, 60 * DPR, 14 * DPR, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  ctx.restore();
+}
+/* ============================================================
+   HONEY CUD — memories of spring floating in the air
+   ============================================================ */
+function drawHoneyCud() {
+  const alpha = state.cudMemoryAlpha;
+  if (alpha <= 0.01) return;
+
+  // 5 кадров-воспоминаний, каждый показывается по очереди
+  const phase = state.cudMemoryPhase;      // растёт, например 0..5 за строку
+  const frameIdx = Math.floor(phase) % 5;
+  const localT   = phase % 1;              // 0..1 внутри кадра
+
+  // Плавное появление/исчезание кадра
+  let frameAlpha;
+  if (localT < 0.15)      frameAlpha = localT / 0.15;
+  else if (localT < 0.7)  frameAlpha = 1;
+  else                    frameAlpha = 1 - (localT - 0.7) / 0.3;
+
+  // Кадр — квадрат/облачко в верхней части экрана
+  const cardW = 240 * DPR;
+  const cardH = 160 * DPR;
+  const cx = W * 0.5;
+  const cy = H * 0.32;
+
+  ctx.save();
+  ctx.globalAlpha = alpha * frameAlpha;
+
+  // ---- мягкая рамка-облако ----
+  ctx.beginPath();
+  ctx.moveTo(cx - cardW * 0.5, cy - cardH * 0.5);
+  ctx.quadraticCurveTo(cx - cardW * 0.7, cy, cx - cardW * 0.5, cy + cardH * 0.5);
+  ctx.lineTo(cx + cardW * 0.5, cy + cardH * 0.5);
+  ctx.quadraticCurveTo(cx + cardW * 0.7, cy, cx + cardW * 0.5, cy - cardH * 0.5);
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(255, 245, 235, 0.15)';
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(255, 235, 220, 0.55)';
+  ctx.lineWidth = 1.8 * DPR;
+  ctx.stroke();
+
+  // ---- содержимое кадра — сцена весны ----
+  ctx.save();
+  // клипуем по рамке
+  ctx.beginPath();
+  ctx.rect(cx - cardW * 0.5, cy - cardH * 0.5, cardW, cardH);
+  ctx.clip();
+
+  // фон — розово-голубое небо
+  const sky = ctx.createLinearGradient(0, cy - cardH * 0.5, 0, cy + cardH * 0.5);
+  sky.addColorStop(0, 'rgba(200, 225, 255, 0.9)');
+  sky.addColorStop(1, 'rgba(255, 220, 235, 0.9)');
+  ctx.fillStyle = sky;
+  ctx.fillRect(cx - cardW * 0.5, cy - cardH * 0.5, cardW, cardH);
+
+  // земля
+  ctx.fillStyle = 'rgba(130, 190, 130, 0.9)';
+  ctx.fillRect(cx - cardW * 0.5, cy + cardH * 0.15, cardW, cardH * 0.35);
+
+  // ---- разные кадры ----
+  if (frameIdx === 0) {
+    // цветущее дерево
+    ctx.fillStyle = 'rgba(70, 50, 30, 0.9)';
+    ctx.fillRect(cx - 4 * DPR, cy + cardH * 0.15, 8 * DPR, cardH * 0.35);
+    ctx.fillStyle = 'rgba(255, 180, 210, 0.9)';
+    for (let i = 0; i < 18; i++) {
+      const a = (i / 18) * Math.PI * 2;
+      const r = 40 * DPR + Math.sin(i * 3) * 10 * DPR;
+      const bx = cx + Math.cos(a) * r;
+      const by = cy - 10 * DPR + Math.sin(a) * r * 0.7;
+      ctx.beginPath();
+      ctx.arc(bx, by, 6 * DPR, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  } else if (frameIdx === 1) {
+    // бабочки
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2;
+      const r = 30 * DPR + i * 5 * DPR;
+      const bx = cx + Math.cos(a) * r;
+      const by = cy + Math.sin(a) * r * 0.5;
+      ctx.fillStyle = `hsla(${300 + i * 8}, 80%, 75%, 0.9)`;
+      ctx.beginPath();
+      ctx.ellipse(bx - 4 * DPR, by, 5 * DPR, 4 * DPR, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.ellipse(bx + 4 * DPR, by, 5 * DPR, 4 * DPR, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  } else if (frameIdx === 2) {
+    // ручей
+    ctx.strokeStyle = 'rgba(180, 220, 255, 0.9)';
+    ctx.lineWidth = 8 * DPR;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(cx - 80 * DPR, cy + 20 * DPR);
+    for (let x = -80 * DPR; x <= 80 * DPR; x += 15 * DPR) {
+      ctx.lineTo(cx + x, cy + 20 * DPR + Math.sin(x * 0.05) * 8 * DPR);
+    }
+    ctx.stroke();
+  } else if (frameIdx === 3) {
+    // цветы
+    for (let i = 0; i < 14; i++) {
+      const fx = cx - cardW * 0.4 + i * (cardW * 0.8 / 14);
+      const fy = cy + cardH * 0.25 + Math.sin(i) * 8 * DPR;
+      ctx.fillStyle = `hsla(${320 + i * 3}, 75%, 78%, 0.95)`;
+      for (let p = 0; p < 5; p++) {
+        const pa = (p / 5) * Math.PI * 2;
+        ctx.beginPath();
+        ctx.arc(fx + Math.cos(pa) * 4 * DPR, fy + Math.sin(pa) * 4 * DPR, 3 * DPR, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.fillStyle = 'rgba(255, 240, 140, 1)';
+      ctx.beginPath();
+      ctx.arc(fx, fy, 2.5 * DPR, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  } else if (frameIdx === 4) {
+    // солнце и облака
+    ctx.fillStyle = 'rgba(255, 230, 150, 0.95)';
+    ctx.beginPath();
+    ctx.arc(cx + 60 * DPR, cy - 30 * DPR, 24 * DPR, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+    for (let i = 0; i < 4; i++) {
+      const cx2 = cx - 80 * DPR + i * 40 * DPR;
+      const cy2 = cy - 40 * DPR + Math.cos(i) * 10 * DPR;
+      ctx.beginPath();
+      ctx.ellipse(cx2, cy2, 25 * DPR, 10 * DPR, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  // ---- лёгкая дымка сверху (эффект "медовой жвачки") ----
+  const haze = ctx.createLinearGradient(0, cy - cardH * 0.5, 0, cy + cardH * 0.5);
+  haze.addColorStop(0, 'rgba(255, 220, 180, 0.2)');
+  haze.addColorStop(0.5, 'rgba(255, 200, 140, 0.05)');
+  haze.addColorStop(1, 'rgba(255, 220, 180, 0.2)');
+  ctx.fillStyle = haze;
+  ctx.fillRect(cx - cardW * 0.5, cy - cardH * 0.5, cardW, cardH);
+
+  ctx.restore(); // конец клипа
+
+  // ---- рамка поверх (обводка) ----
+  ctx.beginPath();
+  ctx.moveTo(cx - cardW * 0.5, cy - cardH * 0.5);
+  ctx.quadraticCurveTo(cx - cardW * 0.7, cy, cx - cardW * 0.5, cy + cardH * 0.5);
+  ctx.lineTo(cx + cardW * 0.5, cy + cardH * 0.5);
+  ctx.quadraticCurveTo(cx + cardW * 0.7, cy, cx + cardW * 0.5, cy - cardH * 0.5);
+  ctx.closePath();
+  ctx.strokeStyle = 'rgba(255, 235, 200, 0.75)';
+  ctx.lineWidth = 2 * DPR;
+  ctx.stroke();
+
+  // ---- мягкое свечение вокруг кадра ----
+  const glow = ctx.createRadialGradient(cx, cy, cardW * 0.4, cx, cy, cardW * 1.1);
+  glow.addColorStop(0, 'rgba(255, 220, 180, 0.25)');
+  glow.addColorStop(1, 'rgba(255, 220, 180, 0)');
+  ctx.fillStyle = glow;
+  ctx.beginPath();
+  ctx.arc(cx, cy, cardW * 1.1, 0, Math.PI * 2);
+  ctx.fill();
+
+    // ============================================================
+  // БЕЛЫЕ КРУГИ-МЫСЛИ — дорожка от головы рыцаря к облачку
+  // ============================================================
+
+  // Позиция головы рыцаря в мировых координатах
+  const groundY = H * 0.78;
+  const S = DPR * 1.4;
+  const knightX = W * 0.5;
+  // рыцарь сдвинут влево и опущен (см. drawCharacter)
+  const headX = knightX + state.cudSitProgress * (0 * S);
+  const headY = groundY - 40 * S + state.cudSitProgress * 24 * S - 80 * S;
+
+  // Целевая точка — нижний край рамки воспоминаний
+  const targetX = cx;
+  const targetY = cy + cardH * 0.55;
+
+  // 4 белых кружка от головы к облачку — увеличиваются
+  const bubbleCount = 4;
+  for (let i = 0; i < bubbleCount; i++) {
+    const t = (i + 1) / (bubbleCount + 1);   // 0.2, 0.4, 0.6, 0.8
+
+    // интерполяция позиции: от головы к нижнему краю рамки
+    // лёгкий изгиб по дуге для естественности
+    const midX = (headX + targetX) * 0.5;
+    const midY = (headY + targetY) * 0.5 - 40 * DPR;
+
+    // квадратичная кривая Безье
+    const bx = (1 - t) * (1 - t) * headX
+             + 2 * (1 - t) * t * midX
+             + t * t * targetX;
+    const by = (1 - t) * (1 - t) * headY
+             + 2 * (1 - t) * t * midY
+             + t * t * targetY;
+
+    // размер растёт от головы к рамке
+    const bubbleR = (4 + t * 10) * DPR;
+
+    // лёгкая пульсация в такт
+    const pulse = 1 + Math.sin(state.objectPulse * 2 + i * 1.3) * 0.1;
+
+    // ---- мягкое свечение ----
+    const glow = ctx.createRadialGradient(bx, by, 0, bx, by, bubbleR * 3);
+    glow.addColorStop(0, 'rgba(255, 245, 230, 0.45)');
+    glow.addColorStop(1, 'rgba(255, 245, 230, 0)');
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.arc(bx, by, bubbleR * 3, 0, Math.PI * 2);
+    ctx.fill();
+
+    // ---- сам кружок ----
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+    ctx.beginPath();
+    ctx.arc(bx, by, bubbleR * pulse, 0, Math.PI * 2);
+    ctx.fill();
+
+    // ---- тонкая обводка ----
+    ctx.strokeStyle = 'rgba(220, 200, 170, 0.7)';
+    ctx.lineWidth = 1 * DPR;
+    ctx.stroke();
+  }
+
+  // ---- маленькие дополнительные кружки рядом с головой ----
+  for (let i = 0; i < 2; i++) {
+    const bx = headX + (25 + i * 15) * DPR;
+    const by = headY - (18 + i * 12) * DPR;
+    const bubbleR = (3 - i * 0.8) * DPR;
+    const pulse = 1 + Math.sin(state.objectPulse * 3 + i) * 0.15;
+
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+    ctx.beginPath();
+    ctx.arc(bx, by, bubbleR * pulse, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+/* ============================================================
+   MIST PASSING — beautiful images drifting through the fog
+   ============================================================ */
+function drawMistPassing() {
+  const alpha = state.mistPassingAlpha;
+  if (alpha <= 0.01) return;
+
+  // 6 разных образов
+  const images = [
+    { type: 'flower',   yOff: 0.40, size: 1.0  },
+    { type: 'butterfly',yOff: 0.55, size: 0.85 },
+    { type: 'lightbeam',yOff: 0.32, size: 1.1  },
+    { type: 'bird',     yOff: 0.48, size: 0.9  },
+    { type: 'star',     yOff: 0.28, size: 0.8  },
+    { type: 'leaf',     yOff: 0.60, size: 1.0  }
+  ];
+
+  // все образы движутся по горизонтали от W+100 к -200
+  const cycleDur = 6.0;      // секунд на один проход
+  const totalSpan = W + 300 * DPR;
+
+  for (let i = 0; i < images.length; i++) {
+    const img = images[i];
+
+    // у каждого образа — сдвиг фазы
+    const localPhase = (state.mistPassingPhase + i * 0.17) % 1;
+    const x = W + 100 * DPR - localPhase * totalSpan;
+    const y = H * img.yOff + Math.sin(state.objectPulse * 0.6 + i) * 20 * DPR;
+
+    // прозрачность: появляется, держится, растворяется
+    let imgAlpha = 1;
+    if (localPhase < 0.15)      imgAlpha = localPhase / 0.15;
+    else if (localPhase > 0.75) imgAlpha = (1 - localPhase) / 0.25;
+
+    if (imgAlpha <= 0.01) continue;
+
+    const S = DPR * img.size;
+    ctx.save();
+    ctx.globalAlpha = alpha * imgAlpha * 0.75;   // полупрозрачные
+    ctx.translate(x, y);
+
+    // ---- ФЛУОРИСЦЕНТНОЕ СВЕЧЕНИЕ ВОКРУГ ОБРАЗА ----
+    const glow = ctx.createRadialGradient(0, 0, 0, 0, 0, 60 * S);
+    glow.addColorStop(0, 'rgba(255, 240, 200, 0.4)');
+    glow.addColorStop(1, 'rgba(255, 240, 200, 0)');
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.arc(0, 0, 60 * S, 0, Math.PI * 2);
+    ctx.fill();
+
+    // ================== ЦВЕТОК ==================
+    if (img.type === 'flower') {
+      for (let p = 0; p < 6; p++) {
+        const pa = (p / 6) * Math.PI * 2;
+        ctx.fillStyle = 'rgba(255, 200, 225, 0.85)';
+        ctx.beginPath();
+        ctx.arc(Math.cos(pa) * 12 * S, Math.sin(pa) * 12 * S, 8 * S, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.fillStyle = 'rgba(255, 230, 120, 0.95)';
+      ctx.beginPath();
+      ctx.arc(0, 0, 7 * S, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // ================== БАБОЧКА ==================
+    else if (img.type === 'butterfly') {
+      const flap = Math.abs(Math.sin(state.objectPulse * 3 + i));
+      const ww = 12 * S * (0.6 + flap * 0.7);
+      ctx.fillStyle = 'rgba(255, 190, 230, 0.9)';
+      ctx.beginPath();
+      ctx.ellipse(-8 * S, -4 * S, ww, 8 * S, -0.3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.ellipse(8 * S, -4 * S, ww, 8 * S, 0.3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = 'rgba(190, 130, 200, 0.85)';
+      ctx.beginPath();
+      ctx.ellipse(-6 * S, 6 * S, ww * 0.7, 6 * S, -0.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.ellipse(6 * S, 6 * S, ww * 0.7, 6 * S, 0.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = 'rgba(40, 20, 40, 0.9)';
+      ctx.beginPath();
+      ctx.ellipse(0, 0, 2 * S, 6 * S, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // ================== ЛУЧ СВЕТА ==================
+    else if (img.type === 'lightbeam') {
+      const beamGrad = ctx.createLinearGradient(-30 * S, -60 * S, 30 * S, 60 * S);
+      beamGrad.addColorStop(0,   'rgba(255, 250, 220, 0)');
+      beamGrad.addColorStop(0.5, 'rgba(255, 250, 220, 0.6)');
+      beamGrad.addColorStop(1,   'rgba(255, 250, 220, 0)');
+      ctx.fillStyle = beamGrad;
+      ctx.beginPath();
+      ctx.moveTo(-25 * S, -70 * S);
+      ctx.lineTo( 25 * S, -70 * S);
+      ctx.lineTo( 40 * S,  70 * S);
+      ctx.lineTo(-40 * S,  70 * S);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    // ================== ПТИЦА ==================
+    else if (img.type === 'bird') {
+      ctx.strokeStyle = 'rgba(220, 220, 240, 0.9)';
+      ctx.lineWidth = 2.2 * S;
+      ctx.lineCap = 'round';
+      const flap = Math.sin(state.objectPulse * 4 + i) * 6 * S;
+      ctx.beginPath();
+      ctx.moveTo(-14 * S, flap);
+      ctx.quadraticCurveTo(0, -4 * S, 14 * S, flap);
+      ctx.stroke();
+    }
+
+    // ================== ЗВЕЗДА ==================
+    else if (img.type === 'star') {
+      ctx.fillStyle = 'rgba(255, 245, 200, 0.95)';
+      const R = 18 * S;
+      ctx.beginPath();
+      for (let k = 0; k < 10; k++) {
+        const a = (k / 10) * Math.PI * 2 - Math.PI / 2;
+        const r = k % 2 === 0 ? R : R * 0.4;
+        const px = Math.cos(a) * r;
+        const py = Math.sin(a) * r;
+        if (k === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      }
+      ctx.closePath();
+      ctx.fill();
+      // свечение
+      const starGlow = ctx.createRadialGradient(0, 0, 0, 0, 0, R * 2);
+      starGlow.addColorStop(0, 'rgba(255, 250, 200, 0.5)');
+      starGlow.addColorStop(1, 'rgba(255, 250, 200, 0)');
+      ctx.fillStyle = starGlow;
+      ctx.beginPath();
+      ctx.arc(0, 0, R * 2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // ================== ЛИСТ ==================
+    else if (img.type === 'leaf') {
+      ctx.fillStyle = 'rgba(230, 150, 80, 0.9)';
+      ctx.beginPath();
+      ctx.ellipse(0, 0, 15 * S, 7 * S, -0.3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(150, 80, 30, 0.85)';
+      ctx.lineWidth = 1 * S;
+      ctx.beginPath();
+      ctx.moveTo(-14 * S, 0);
+      ctx.lineTo(14 * S, 0);
+      ctx.stroke();
+    }
+
+    ctx.restore();
+  }
+}
+/* ============================================================
+   THRESHOLD BROOK — brook with flowing leaves, reflection
+   ============================================================ */
+function drawThresholdBrook() {
+    console.log('brookCameraDip:', state.brookCameraDip);
+  const alpha = state.brookAlpha;
+  if (alpha <= 0.01) return;
+
+  const groundY = H * 0.78;
+  const S = DPR;
+
+  // ---- ручей — горизонтальная полоса у самой земли ----
+  const brookY = groundY + 30 * S;
+  const brookH = 70 * S;
+
+  ctx.save();
+  ctx.globalAlpha = alpha;
+
+  // ---- вода (градиент от синего к тёмному) ----
+  const waterGrad = ctx.createLinearGradient(0, brookY - brookH * 0.5, 0, brookY + brookH * 0.5);
+  waterGrad.addColorStop(0,   'rgba(80, 110, 150, 0.9)');
+  waterGrad.addColorStop(0.5, 'rgba(50, 80, 120, 0.95)');
+  waterGrad.addColorStop(1,   'rgba(30, 50, 85, 0.95)');
+  ctx.fillStyle = waterGrad;
+
+    // ручей — с запасом за края экрана (чтобы не было обрезки)
+  const overshoot = 40 * S;
+  ctx.beginPath();
+  ctx.moveTo(-overshoot, brookY);
+  for (let x = -overshoot; x <= W + overshoot; x += 30 * S) {
+    const y = brookY + Math.sin(x * 0.006 + state.t * 1.5) * 4 * S;
+    ctx.lineTo(x, y);
+  }
+  ctx.lineTo(W + overshoot, brookY + brookH);
+  for (let x = W + overshoot; x >= -overshoot; x -= 30 * S) {
+    const y = brookY + brookH + Math.sin(x * 0.007 + state.t * 1.2) * 4 * S;
+    ctx.lineTo(x, y);
+  }
+  ctx.closePath();
+  ctx.fill();
+
+  // ---- блики на воде ----
+  ctx.strokeStyle = 'rgba(200, 225, 250, 0.5)';
+  ctx.lineWidth = 1.4 * S;
+  for (let i = 0; i < 12; i++) {
+    const seed = i * 71.3;
+    const x = ((seed * 173) % W) + Math.sin(state.t * 1.5 + i) * 30 * S;
+    const y = brookY + 15 * S + (seed % 40) * S;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + 15 * S, y);
+    ctx.stroke();
+  }
+
+  // ---- листья и цветы, плывущие по ручью ----
+  const flowingCount = 12;
+  for (let i = 0; i < flowingCount; i++) {
+    // фаза каждого листа/цветка
+    const speed = 0.08 + (i % 4) * 0.03;
+    const phase = (state.t * speed + i * 0.13) % 1;
+    const x = -100 * S + phase * (W + 200 * S);
+    const y = brookY + 10 * S + ((i * 37) % brookH * 0.7);
+    const seed = i * 91.7;
+
+    const isFlower = (i % 3 === 0);
+    const size = (5 + (seed % 5)) * S;
+
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(Math.sin(state.t * 2 + i) * 0.5);
+
+    if (isFlower) {
+      // цветок
+      for (let p = 0; p < 5; p++) {
+        const pa = (p / 5) * Math.PI * 2;
+        ctx.fillStyle = `hsla(${320 + (seed % 30)}, 75%, 78%, 0.95)`;
+        ctx.beginPath();
+        ctx.arc(Math.cos(pa) * size, Math.sin(pa) * size, size * 0.75, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.fillStyle = 'rgba(255, 240, 140, 0.95)';
+      ctx.beginPath();
+      ctx.arc(0, 0, size * 0.5, 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      // лист
+      ctx.fillStyle = `hsla(${15 + (seed % 40)}, 70%, 50%, 0.95)`;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, size * 1.5, size * 0.7, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = `hsla(${15 + (seed % 40)}, 70%, 30%, 0.7)`;
+      ctx.lineWidth = 0.8 * S;
+      ctx.beginPath();
+      ctx.moveTo(-size * 1.5, 0);
+      ctx.lineTo(size * 1.5, 0);
+      ctx.stroke();
+    }
+
+    ctx.restore();
+
+    // круги на воде после листа
+    ctx.strokeStyle = 'rgba(200, 225, 250, 0.4)';
+    ctx.lineWidth = 0.8 * S;
+    const ripplePhase = (state.t * 1.5 + i) % 1;
+    const rippleR = ripplePhase * 18 * S;
+    ctx.globalAlpha = alpha * (1 - ripplePhase);
+    ctx.beginPath();
+    ctx.ellipse(x, y, rippleR, rippleR * 0.35, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.globalAlpha = alpha;
+  }
+
+  ctx.restore();
+
+  // ---- отражение рыцаря в воде (появляется при наезде камеры) ----
+  const dip = state.brookCameraDip;
+  if (dip > 0.2) {
+    ctx.save();
+    ctx.globalAlpha = alpha * (dip - 0.2) / 0.8 * 0.55;
+    ctx.translate(W * 0.5, brookY + 5 * S);
+    // отражение — сжатая и перевёрнутая версия рыцаря
+    ctx.scale(1, -0.55);
+
+    // упрощённый силуэт рыцаря
+    const S2 = DPR * 1.4 * 0.8;
+    ctx.fillStyle = 'rgba(30, 30, 50, 0.9)';
+
+    // тело
+    ctx.fillRect(-10 * S2, 0, 20 * S2, 60 * S2);
+    // голова
+    ctx.beginPath();
+    ctx.arc(0, -12 * S2, 12 * S2, 0, Math.PI * 2);
+    ctx.fill();
+    // плечи
+    ctx.fillRect(-22 * S2, 5 * S2, 44 * S2, 12 * S2);
+
+    // рябь на отражении — тонкие полосы поверх
+    ctx.strokeStyle = 'rgba(200, 225, 250, 0.6)';
+    ctx.lineWidth = 1 * S;
+    for (let i = 0; i < 6; i++) {
+      const ry = i * 12 * S2;
+      ctx.beginPath();
+      ctx.moveTo(-30 * S2, ry);
+      ctx.lineTo(30 * S2, ry + Math.sin(state.t * 2 + i) * 3 * S);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+}
+/* ============================================================
+   PROLOGUE DIAL — 4 seasons on a clock face
+   ============================================================ */
+function drawDial() {
+  const cx = W * 0.5;
+  const cy = H * 0.45;
+  const R  = 160 * DPR;
+
+  ctx.save();
+  ctx.globalAlpha = state.dialAlpha;
+  ctx.translate(cx, cy);
+
+  // ---- 4 sectors ----
+  const sectors = [
+    { name: 'Spring', color: [255, 180, 210], start: -Math.PI * 0.5 },
+    { name: 'Summer', color: [255, 220, 120], start:  0 },
+    { name: 'Autumn', color: [210, 110,  60], start:  Math.PI * 0.5 },
+    { name: 'Winter', color: [170, 200, 230], start:  Math.PI }
+  ];
+
+  for (let i = 0; i < 4; i++) {
+    const s = sectors[i];
+    const a0 = s.start;
+    const a1 = s.start + Math.PI * 0.5;
+
+    // ---- sector wedge ----
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.arc(0, 0, R, a0, a1);
+    ctx.closePath();
+
+    // is arrow inside this sector?
+    const arrowA = ((state.dialAngle % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
+    const arrowIn = arrowA >= ((a0 % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2)
+                 && arrowA <  ((a1 % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
+    const fillAlpha = arrowIn ? 0.55 : 0.15;
+
+    ctx.fillStyle = rgba(s.color, fillAlpha);
+    ctx.fill();
+    ctx.strokeStyle = rgba(s.color, 0.85);
+    ctx.lineWidth = 1.5 * DPR;
+    ctx.stroke();
+
+    // ---- icon in sector ----
+    const midA = (a0 + a1) * 0.5;
+    const ix = Math.cos(midA) * R * 0.68;
+    const iy = Math.sin(midA) * R * 0.68;
+    const iconSize = 20 * DPR;
+
+    ctx.save();
+    ctx.translate(ix, iy);
+    const pulse = arrowIn ? 1 + Math.sin(state.objectPulse * 2.5) * 0.1 : 1;
+    ctx.scale(pulse, pulse);
+
+    // backdrop
+    ctx.beginPath();
+    ctx.arc(0, 0, iconSize * 1.3, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(10, 12, 20, 0.6)';
+    ctx.fill();
+    ctx.strokeStyle = rgba(s.color, arrowIn ? 0.95 : 0.6);
+    ctx.lineWidth = 1.4 * DPR;
+    ctx.stroke();
+
+    // ---- per-season icon ----
+    if (s.name === 'Spring') {
+      for (let p = 0; p < 6; p++) {
+        const pa = (p / 6) * Math.PI * 2;
+        ctx.beginPath();
+        ctx.arc(Math.cos(pa) * iconSize * 0.55, Math.sin(pa) * iconSize * 0.55, iconSize * 0.35, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(255, 200, 225, 0.95)';
+        ctx.fill();
+      }
+      ctx.beginPath();
+      ctx.arc(0, 0, iconSize * 0.32, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255, 230, 120, 1)';
+      ctx.fill();
+    }
+    else if (s.name === 'Summer') {
+      ctx.strokeStyle = 'rgba(255, 220, 130, 0.95)';
+      ctx.lineWidth = 1.6 * DPR;
+      ctx.lineCap = 'round';
+      for (let r = 0; r < 10; r++) {
+        const ra = (r / 10) * Math.PI * 2;
+        ctx.beginPath();
+        ctx.moveTo(Math.cos(ra) * iconSize * 0.8, Math.sin(ra) * iconSize * 0.8);
+        ctx.lineTo(Math.cos(ra) * iconSize * 1.05, Math.sin(ra) * iconSize * 1.05);
+        ctx.stroke();
+      }
+      ctx.beginPath();
+      ctx.arc(0, 0, iconSize * 0.65, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255, 235, 130, 1)';
+      ctx.fill();
+    }
+    else if (s.name === 'Autumn') {
+      ctx.fillStyle = 'rgba(220, 110, 55, 0.98)';
+      const RR = iconSize * 0.9;
+      const pts = [
+        [0, -RR], [RR*0.22, -RR*0.42], [RR*0.75, -RR*0.62], [RR*0.42, -RR*0.14],
+        [RR*0.95, RR*0.08], [RR*0.35, RR*0.22], [RR*0.5, RR*0.7], [0, RR*0.42],
+        [-RR*0.5, RR*0.7], [-RR*0.35, RR*0.22], [-RR*0.95, RR*0.08],
+        [-RR*0.42, -RR*0.14], [-RR*0.75, -RR*0.62], [-RR*0.22, -RR*0.42]
+      ];
+      ctx.beginPath();
+      ctx.moveTo(pts[0][0], pts[0][1]);
+      for (let k = 1; k < pts.length; k++) ctx.lineTo(pts[k][0], pts[k][1]);
+      ctx.closePath();
+      ctx.fill();
+    }
+    else if (s.name === 'Winter') {
+      ctx.strokeStyle = 'rgba(200, 225, 250, 0.98)';
+      ctx.lineWidth = 1.6 * DPR;
+      ctx.lineCap = 'round';
+      const armLen = iconSize * 0.85;
+      for (let a = 0; a < 6; a++) {
+        const ang = (a / 6) * Math.PI * 2;
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(Math.cos(ang) * armLen, Math.sin(ang) * armLen);
+        ctx.stroke();
+        const bx = Math.cos(ang) * armLen * 0.6;
+        const by = Math.sin(ang) * armLen * 0.6;
+        for (const sign of [-1, 1]) {
+          const ba = ang + sign * Math.PI / 5;
+          ctx.beginPath();
+          ctx.moveTo(bx, by);
+          ctx.lineTo(bx + Math.cos(ba) * armLen * 0.3, by + Math.sin(ba) * armLen * 0.3);
+          ctx.stroke();
+        }
+      }
+      ctx.beginPath();
+      ctx.arc(0, 0, iconSize * 0.14, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(220, 240, 255, 1)';
+      ctx.fill();
+    }
+
+    ctx.restore();
+
+    // ---- label ----
+    const lx = Math.cos(midA) * R * 1.22;
+    const ly = Math.sin(midA) * R * 1.22;
+    ctx.font = `${Math.round(12 * DPR)}px Georgia`;
+    ctx.fillStyle = rgba(s.color, arrowIn ? 1 : 0.6);
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(s.name, lx, ly);
+  }
+
+  // ---- outer ring ----
+  ctx.beginPath();
+  ctx.arc(0, 0, R, 0, Math.PI * 2);
+  ctx.strokeStyle = 'rgba(220, 220, 240, 0.7)';
+  ctx.lineWidth = 2 * DPR;
+  ctx.stroke();
+
+  // ---- tick marks ----
+  for (let t = 0; t < 4; t++) {
+    const a = -Math.PI * 0.5 + t * Math.PI * 0.5;
+    ctx.beginPath();
+    ctx.moveTo(Math.cos(a) * (R - 8 * DPR), Math.sin(a) * (R - 8 * DPR));
+    ctx.lineTo(Math.cos(a) * R, Math.sin(a) * R);
+    ctx.strokeStyle = 'rgba(220, 220, 240, 0.9)';
+    ctx.lineWidth = 2 * DPR;
+    ctx.stroke();
+  }
+
+  // ---- center hub ----
+  ctx.beginPath();
+  ctx.arc(0, 0, 8 * DPR, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(240, 240, 255, 0.95)';
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(90, 90, 110, 0.8)';
+  ctx.lineWidth = 2 * DPR;
+  ctx.stroke();
+
+  // ---- arrow ----
+  const aLen = R * 0.85;
+  const ax = Math.cos(state.dialAngle) * aLen;
+  const ay = Math.sin(state.dialAngle) * aLen;
+
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.lineTo(ax, ay);
+  ctx.strokeStyle = 'rgba(255, 250, 230, 0.95)';
+  ctx.lineWidth = 3 * DPR;
+  ctx.lineCap = 'round';
+  ctx.stroke();
+
+  // arrow tip
+  ctx.save();
+  ctx.translate(ax, ay);
+  ctx.rotate(state.dialAngle);
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.lineTo(-8 * DPR, -4 * DPR);
+  ctx.lineTo(-8 * DPR,  4 * DPR);
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(255, 250, 230, 1)';
+  ctx.fill();
+  ctx.restore();
+
+  ctx.restore();
+}
+function updateParticles(dt, season) {
+  // ----- RAIN on threshold brook line -----
+  if (season === 'spring' || season === 'summer') {
+    for (const f of state.flowers) f.grow = Math.min(1, f.grow + dt * 0.9);
+  }
+  if (season === 'autumn' || season === 'winter' || season === 'final') {
+    for (let i = state.leaves.length - 1; i >= 0; i--) {
+      const l = state.leaves[i];
+      l.x += l.vx * dt * DPR;
+      l.y += l.vy * dt * DPR;
+      l.rot += l.vr * dt;
+      if (l.y > H + 60) {
+        if (season === 'autumn') Object.assign(l, makeLeaf());
+        else state.leaves.splice(i, 1);
+      }
+    }
+  }
+ if (season === 'winter' || season === 'final' || season === 'prologue') {
+  const isWinter = season === 'winter';
+  const windStrength = isWinter ? 2.4 : 1;   // сильнее ветер зимой
+
+  for (let i = state.snow.length - 1; i >= 0; i--) {
+    const s = state.snow[i];
+    // horizontal wind push
+    s.x += (s.vx * windStrength + (isWinter ? 90 : 0)) * dt * DPR;
+    s.y += s.vy * dt * DPR;
+    // flutter
+    s.x += Math.sin(state.t * 4 + s.y * 0.02) * 1.4 * DPR * (isWinter ? 2 : 1);
+    // recycle
+    if (s.y > H + 30 || s.x > W + 40) {
+      if (season === 'winter' || season === 'final') {
+        const fresh = makeSnow();
+        if (isWinter) {
+          fresh.x = -20 * DPR + Math.random() * W * 0.4;
+          fresh.vx = 60 + Math.random() * 40;
+        }
+        Object.assign(s, fresh);
+      } else {
+        state.snow.splice(i, 1);
+      }
+    }
+  }
+}
+  if (season === 'spring' || season === 'summer') {
+    for (let i = state.birds.length - 1; i >= 0; i--) {
+      const b = state.birds[i];
+      b.x += b.vx * dt;
+      b.phase += dt * 7;
+      if (b.x > W + 120) Object.assign(b, makeBird());
+    }
+  }
+  if (season === 'summer') {
+    for (let i = state.embers.length - 1; i >= 0; i--) {
+      const e = state.embers[i];
+      e.x += e.vx * dt * DPR;
+      e.y += e.vy * dt * DPR;
+      e.life -= dt;
+      if (e.life <= 0 || e.y < H * 0.35) {
+        Object.assign(e, makeEmber());
+      }
+    }
+  }
+  if (season === 'autumn') {
+    for (const m of state.mistPuffs) {
+      m.x += m.vx * dt * DPR;
+      m.y += m.vy * dt * DPR;
+      if (m.x < -200 * DPR) m.x = W + 100 * DPR;
+      if (m.x > W + 200 * DPR) m.x = -100 * DPR;
+    }
+  }
+  if (season === 'winter') {
+    for (let i = state.ash.length - 1; i >= 0; i--) {
+      const a = state.ash[i];
+      a.x += a.vx * dt * DPR;
+      a.y += a.vy * dt * DPR;
+      a.life -= dt;
+      if (a.life <= 0) Object.assign(a, makeAsh());
+    }
+    for (const m of state.mistPuffs) {
+      m.x += m.vx * dt * DPR * 0.4;
+      m.y += m.vy * dt * DPR * 0.4;
+      if (m.x < -200 * DPR) m.x = W + 100 * DPR;
+      if (m.x > W + 200 * DPR) m.x = -100 * DPR;
+    }
+  }
+}
+
+/* ---------- PARTICLE DRAWING ---------- */
+function drawParticles() {
+    // ---- RAIN on threshold brook line ----
+  if (LINES[state.line].object === 'thresholdBrook') {
+    const density = state.brookRainDensity;
+    if (density > 0.05) {
+      ctx.save();
+      ctx.globalAlpha = density * 0.5;
+      ctx.strokeStyle = 'rgba(200, 220, 240, 0.9)';
+      ctx.lineWidth = 1 * DPR;
+
+      for (let i = 0; i < 80; i++) {
+        const seed = i * 37.71;
+        const speed = 800 + (seed % 400);
+        const x = (seed * 173) % W;
+        const y = ((state.t * speed + seed * 13) % (H + 100)) - 50;
+
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(x - 2 * DPR, y + 12 * DPR);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+  }
+  // flowers
+for (const f of state.flowers) {
+  const s = f.size * f.grow;
+  if (s < 0.5) continue;
+  const sway = Math.sin(state.t * 1.5 + f.sway) * 2 * DPR;
+
+  ctx.save();
+
+  // ---- STEM (растёт из земли вверх к цветку) ----
+  const stemHeight = f.size * 6 * f.grow;      // высота стебля
+  const stemSway   = Math.sin(state.t * 1.2 + f.sway) * 2 * DPR;
+
+  ctx.strokeStyle = `hsla(120, 55%, 32%, ${0.85 * f.grow})`;
+  ctx.lineWidth = 0.9 * DPR;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(f.x, f.y);                         // основание — на земле
+  ctx.quadraticCurveTo(
+    f.x + stemSway * 0.5, f.y - stemHeight * 0.5,
+    f.x + sway,           f.y - stemHeight      // верх стебля — под цветком
+  );
+  ctx.stroke();
+
+  // ---- LEAVES on the stem (2 маленьких листика) ----
+  const leafY1 = f.y - stemHeight * 0.4;
+  const leafY2 = f.y - stemHeight * 0.65;
+  ctx.fillStyle = `hsla(120, 50%, 35%, ${0.8 * f.grow})`;
+  // левый лист
+  ctx.beginPath();
+  ctx.ellipse(f.x + stemSway * 0.3 - 2.5 * DPR, leafY1, 2.2 * DPR, 1 * DPR, -0.5, 0, Math.PI * 2);
+  ctx.fill();
+  // правый лист
+  ctx.beginPath();
+  ctx.ellipse(f.x + stemSway * 0.5 + 2.5 * DPR, leafY2, 2.2 * DPR, 1 * DPR, 0.5, 0, Math.PI * 2);
+  ctx.fill();
+
+  // ---- FLOWER HEAD (лепестки сверху стебля) ----
+  ctx.save();
+  ctx.translate(f.x + sway, f.y - stemHeight);
+  for (let p = 0; p < 5; p++) {
+    const a = (p / 5) * Math.PI * 2;
+    ctx.fillStyle = `hsla(${f.hue}, 75%, 78%, 0.9)`;
+    ctx.beginPath();
+    ctx.arc(Math.cos(a) * s, Math.sin(a) * s, s * 0.75, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  // серединка цветка
+  ctx.fillStyle = 'rgba(255,240,140,0.95)';
+  ctx.beginPath();
+  ctx.arc(0, 0, s * 0.5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+
+  ctx.restore();
+}
+  // leaves
+  for (const l of state.leaves) {
+    ctx.save();
+    ctx.translate(l.x, l.y);
+    ctx.rotate(l.rot);
+    ctx.fillStyle = `hsla(${l.hue}, 65%, 45%, 0.9)`;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, l.size, l.size * 0.45, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // vein
+    ctx.strokeStyle = `hsla(${l.hue}, 65%, 25%, 0.7)`;
+    ctx.lineWidth = 1 * DPR;
+    ctx.beginPath();
+    ctx.moveTo(-l.size, 0);
+    ctx.lineTo(l.size, 0);
+    ctx.stroke();
+    ctx.restore();
+  }
+  // snow
+  for (const s of state.snow) {
+    ctx.fillStyle = `rgba(255,255,255,${s.alpha})`;
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  // birds
+  for (const b of state.birds) {
+    ctx.strokeStyle = 'rgba(30,30,50,0.75)';
+    ctx.lineWidth = 2 * DPR;
+    ctx.beginPath();
+    const flap = Math.sin(b.phase) * b.size * 0.55;
+    ctx.moveTo(b.x - b.size, b.y + flap);
+    ctx.quadraticCurveTo(b.x, b.y - b.size * 0.5, b.x + b.size, b.y + flap);
+    ctx.stroke();
+  }
+  // embers
+  for (const e of state.embers) {
+    const g = ctx.createRadialGradient(e.x, e.y, 0, e.x, e.y, e.size * 4);
+    g.addColorStop(0, `rgba(255,220,140,${e.alpha})`);
+    g.addColorStop(1, 'rgba(255,220,140,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(e.x, e.y, e.size * 4, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  // mist
+  for (const m of state.mistPuffs) {
+    const g = ctx.createRadialGradient(m.x, m.y, 0, m.x, m.y, m.size);
+    g.addColorStop(0, `rgba(200,190,175,${m.alpha})`);
+    g.addColorStop(1, 'rgba(200,190,175,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(m.x, m.y, m.size, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  // ash (winter)
+  for (const a of state.ash) {
+    ctx.fillStyle = `rgba(60,60,70,${a.alpha})`;
+    ctx.beginPath();
+    ctx.arc(a.x, a.y, a.size, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+/* ---------- OVERLAYS ---------- */
+function drawFog(palette) {
+  if (state.fogAlpha <= 0) return;
+  ctx.save();
+  ctx.globalAlpha = state.fogAlpha;
+  const g = ctx.createLinearGradient(0, H * 0.25, 0, H * 0.9);
+  g.addColorStop(0, rgba(palette.fog, 0));
+  g.addColorStop(0.5, rgba(palette.fog, 0.75));
+  g.addColorStop(1, rgba(palette.fog, 0));
+  ctx.fillStyle = g;
+  ctx.fillRect(0, H * 0.25, W, H * 0.7);
+  ctx.restore();
+}
+
+function drawVignette() {
+  const vg = ctx.createRadialGradient(W / 2, H / 2, H * 0.32, W / 2, H / 2, H * 0.95);
+  vg.addColorStop(0, 'rgba(0,0,0,0)');
+  vg.addColorStop(1, `rgba(0,0,0,${state.vignette})`);
+  ctx.fillStyle = vg;
+  ctx.fillRect(0, 0, W, H);
+}
+
+function drawTransitionFlash() {
+  if (state.transitionFlash <= 0) return;
+  ctx.fillStyle = `rgba(255,255,255,${state.transitionFlash * 0.55})`;
+  ctx.fillRect(0, 0, W, H);
+}
+
+/* ---------- PALETTE BLENDING ---------- */
+function getCurrentPalette() {
+  const cur = LINES[state.line].season;
+  const prev = state.line > 0 ? LINES[state.line - 1].season : cur;
+  const blend = Math.min(1, state.t / 3);
+  const p1 = PALETTES[prev];
+  const p2 = PALETTES[cur];
+  return {
+    sky1:   lerpColor(p1.sky1,   p2.sky1,   blend),
+    sky2:   lerpColor(p1.sky2,   p2.sky2,   blend),
+    ground: lerpColor(p1.ground, p2.ground, blend),
+    accent: lerpColor(p1.accent, p2.accent, blend),
+    fog:    lerpColor(p1.fog,    p2.fog,    blend)
+  };
+}
+
+/* ---------- SEASON LOGIC ---------- */
+function updateSeasonLogic(season, dt) {
+    // ----- THRESHOLD BROOK: дождь, ручей, отражение -----
+  if (LINES[state.line].object === 'thresholdBrook') {
+    const dur = LINES[state.line].dur;
+    const t   = state.t / dur;
+
+    // 0–25%: дождь усиливается, ручей проявляется
+    if (t < 0.25) {
+      state.brookRainDensity = t / 0.25;
+      state.brookAlpha = t / 0.25;
+    } else {
+      state.brookRainDensity = 1;
+      state.brookAlpha = 1;
+    }
+
+    // 55–85%: камера плавно опускается к воде
+    if (t < 0.55) {
+      state.brookCameraDip = 0;
+    } else if (t < 0.85) {
+      const k = (t - 0.55) / 0.3;
+      state.brookCameraDip = k * k;
+    } else {
+      const k = (t - 0.85) / 0.15;
+      state.brookCameraDip = 1 - k;
+    }
+  } else {
+    state.brookRainDensity = lerp(state.brookRainDensity, 0, dt * 2);
+    state.brookAlpha = lerp(state.brookAlpha, 0, dt * 3);
+    state.brookCameraDip = lerp(state.brookCameraDip, 0, dt * 2);
+  }
+    // ----- MIST PASSING: густой туман, мимо плывут образы -----
+  if (LINES[state.line].object === 'mistPassing') {
+    const dur = LINES[state.line].dur;
+    const t   = state.t / dur;
+
+    // 0–25%: туман сгущается
+    if (t < 0.25) {
+      state.mistDensity = t / 0.25;
+    } else {
+      state.mistDensity = 1;
+    }
+
+    // 15%+: образы начинают проплывать
+    if (t < 0.15) {
+      state.mistPassingAlpha = 0;
+    } else if (t < 0.3) {
+      state.mistPassingAlpha = (t - 0.15) / 0.15;
+    } else {
+      state.mistPassingAlpha = 1;
+    }
+
+    // фаза — образы проплывают слева направо
+    state.mistPassingPhase += dt * 0.15;
+  } else {
+    state.mistDensity = lerp(state.mistDensity, 0, dt * 2);
+    state.mistPassingAlpha = lerp(state.mistPassingAlpha, 0, dt * 3);
+  }
+    // ----- HONEY CUD: садится, воспоминания всплывают -----
+  if (LINES[state.line].object === 'honeyCud') {
+    const dur = LINES[state.line].dur;
+    const t   = state.t / dur;
+
+    // 0–25%: садится под дерево
+    if (t < 0.25) {
+      const k = t / 0.25;
+      state.cudSitProgress = k * k;
+    } else {
+      state.cudSitProgress = 1;
+    }
+
+    // 20–100%: воспоминания всплывают
+    if (t < 0.2) {
+      state.cudMemoryAlpha = 0;
+    } else if (t < 0.35) {
+      state.cudMemoryAlpha = (t - 0.2) / 0.15;
+    } else if (t < 0.85) {
+      state.cudMemoryAlpha = 1;
+    } else {
+      state.cudMemoryAlpha = 1 - (t - 0.85) / 0.15;
+    }
+
+    // фаза — смена кадров воспоминаний (5 кадров за строку)
+    state.cudMemoryPhase = t * 7;
+  } else {
+    state.cudSitProgress = lerp(state.cudSitProgress, 0, dt * 2);
+    state.cudMemoryAlpha = lerp(state.cudMemoryAlpha, 0, dt * 3);
+  }
+    // ----- SOUL WINGS: появляются, раскрываются, складываются, исчезают -----
+  if (LINES[state.line].object === 'wings') {
+    const dur = LINES[state.line].dur;
+    const t   = state.t / dur;
+
+    // 0–15%: появление крыльев (прозрачность растёт)
+    if (t < 0.15) {
+      state.soulWingsAlpha = t / 0.15;
+      state.soulWingsSpread = 0.3;        // сначала приоткрыты
+    }
+    // 15–40%: крылья широко раскрываются
+    else if (t < 0.4) {
+      state.soulWingsAlpha = 1;
+      const k = (t - 0.15) / 0.25;
+      state.soulWingsSpread = 0.3 + k * 0.7;   // 0.3 → 1.0
+    }
+    // 40–65%: держатся раскрытыми
+    else if (t < 0.65) {
+      state.soulWingsAlpha = 1;
+      state.soulWingsSpread = 1.0;
+    }
+    // 65–90%: складываются
+    else if (t < 0.9) {
+      state.soulWingsAlpha = 1;
+      const k = (t - 0.65) / 0.25;
+      state.soulWingsSpread = 1.0 - k * 0.95;  // 1.0 → 0.05
+    }
+    // 90–100%: полностью исчезают
+    else {
+      const k = (t - 0.9) / 0.1;
+      state.soulWingsAlpha = 1 - k;
+      state.soulWingsSpread = 0.05;
+    }
+
+    state.soulWingsVanishing = state.soulWingsAlpha;
+  } else {
+    state.soulWingsAlpha = lerp(state.soulWingsAlpha, 0, dt * 3);
+    state.soulWingsSpread = lerp(state.soulWingsSpread, 0, dt * 3);
+    state.soulWingsVanishing = lerp(state.soulWingsVanishing, 0, dt * 3);
+  }
+    // ----- CLIFF COVE: sky opens, knight sits -----
+  if (LINES[state.line].object === 'cliffCove') {
+    const dur = LINES[state.line].dur;
+    const t   = state.t / dur;
+
+    // 0–40%: небо раскрывается, бухта проявляется
+    if (t < 0.4) {
+      state.coveRevealProgress = t / 0.4;
+      state.calmAlpha = Math.min(1, t / 0.3);
+    } else {
+      state.coveRevealProgress = 1;
+      state.calmAlpha = 1;
+    }
+
+    // 30–60%: рыцарь присаживается
+    if (t < 0.3) {
+      state.sittingProgress = 0;
+    } else if (t < 0.6) {
+      const k = (t - 0.3) / 0.3;
+      state.sittingProgress = k * k;   // ease-in
+    } else {
+      state.sittingProgress = 1;
+    }
+  } else {
+    state.sittingProgress = lerp(state.sittingProgress, 0, dt * 2);
+    state.coveRevealProgress = lerp(state.coveRevealProgress, 0, dt * 2);
+    state.calmAlpha = lerp(state.calmAlpha, 0, dt * 2);
+  }
+    // ----- HONEY JARS appear on honey lines -----
+  if (LINES[state.line].object === 'honeyJars' ) {
+    state.honeyJarAlpha = Math.min(1, state.t / 1.5);   // проявляются за 1.5 сек
+  } else {
+    state.honeyJarAlpha = lerp(state.honeyJarAlpha, 0, dt * 3);
+  }
+    // ----- CLOUD DREAMS: look up, camera rises, clouds form -----
+  if (LINES[state.line].object === 'cloudDreams') {
+    const dur = LINES[state.line].dur;
+    const t   = state.t / dur;
+
+    // 0–20%: голова поднимается
+    if (t < 0.2) {
+      state.headTilt = t / 0.2;
+    } else {
+      state.headTilt = 1;
+    }
+
+    // 0–80%: камера плавно поднимается вверх
+    if (t < 0.8) {
+      const k = t / 0.8;
+      state.cameraOffY = -k * H * -0.35;   // сдвигаем вверх
+    } else {
+      const k = (t - 0.8) / 0.2;
+      state.cameraOffY = -H * -0.35 * (1 - k);   // отъезд вниз
+    }
+
+    // 30–100%: облака медленно проявляются, образуя фигуры
+    if (t < 0.3) {
+      state.cloudDreamAlpha = 0;
+      state.cloudDreamStage = 0;
+    } else {
+    state.cloudDreamAlpha = Math.min(1, t / 0.50);       
+    state.cloudDreamStage = Math.min(1, t / 0.90);        
+    }
+  } else {
+    state.headTilt = lerp(state.headTilt, 0, dt * 3);
+    state.cloudDreamAlpha = lerp(state.cloudDreamAlpha, 0, dt * 3);
+    state.cloudDreamStage = lerp(state.cloudDreamStage, 0, dt * 3);
+  }
+   
+    // ----- PROLOGUE: camera zoom on line 2 -----
+  if (season === 'prologue' && LINES[state.line].object === 'thoughts') {
+    const dur = LINES[state.line].dur;
+    const t   = state.t / dur;
+
+    // 0–40%: наезд на голову
+    if (t < 0.4) {
+      const k = t / 0.4;
+      state.cameraZoom = lerp(1, 2.8, k);
+    }
+    // 40–70%: держим крупный план
+    else if (t < 0.7) {
+      state.cameraZoom = 2.8;
+    }
+    // 70–100%: отъезд
+    else {
+      const k = (t - 0.7) / 0.3;
+      state.cameraZoom = lerp(2.8, 1, k);
+    }
+
+    // смещаем так, чтобы голова рыцаря была в центре кадра
+    const headWorldY = H * 0.78 - 62 * DPR * 1.4 - 80 * DPR * 1.4;
+    const focusY = (H * 0.5 - headWorldY) / state.cameraZoom;
+    state.cameraOffY = focusY * (state.cameraZoom - 1);
+    state.cameraOffX = 0;
+  } else {
+    // откат к обычной камере
+    state.cameraZoom = lerp(state.cameraZoom, 1, dt * 3);
+    state.cameraOffX = lerp(state.cameraOffX, 0, dt * 3);
+    state.cameraOffY = lerp(state.cameraOffY, 0, dt * 3);
+  }
+  const speedMap = {
+    prologue: 1.0, spring: 1., summer: 0.5,
+    autumn: 0.9, winter: 0.40, final: 0.30
+  };
+  const speed = speedMap[season] || 1;
+
+// ----- PROLOGUE: циферблат, стрелка, первый шаг -----
+if (season === 'prologue' && state.dialActive) {
+  const dur = LINES[state.line].dur;
+
+  if (state.t < dur * 0.15) {
+    // 0–15%: появление циферблата
+    state.dialAlpha = state.t / (dur * 0.15);
+  } else if (state.t < dur * 0.80) {
+    // 15–80%: полная видимость, стрелка вращается
+    state.dialAlpha = 1;
+  } else if (state.t < dur * 0.95) {
+    // 80–95%: растворение
+    state.dialAlpha = 1 - (state.t - dur * 0.80) / (dur * 0.15);
+  } else {
+    // 95%+: циферблат исчез
+    state.dialAlpha = 0;
+    state.dialActive = false;
+    state.firstStep = true;
+  }
+
+  // вращение стрелки (медленное, стабильное)
+  state.dialAngle += dt * 1.1;
+
+  // пока циферблат виден — рыцарь стоит
+  if (!state.firstStep) {
+    state.characterBob += 0;
+  } else // когда рыцарь лежит — не двигается
+if (state.lieDownProgress >= 0.95) {
+  state.characterBob += 0;
+} else {
+  state.characterBob += dt * 6 * speed * (1 - state.lieDownProgress);
+}
+    
+  
+} else {
+if (state.cudSitProgress >= 0.9) {
+  state.characterBob += 0;   // сидит, не идёт
+} else {
+  state.characterBob += dt * 6 * speed;
+}
+}
+
+  // lean forward more in winter (struggle)
+  const targetLean = season === 'winter' ? 0.45 : season === 'final' ? 0.05 : 0.02;
+  state.characterLean = lerp(state.characterLean, targetLean, dt * 2);
+
+  // в финале рыцарь исчезает за 40% длительности строки (было ~90%)
+let targetAlpha = 1;
+if (season === 'final') {
+  const dur = LINES[state.line].dur;
+  const t = state.t / dur;
+  if (t < 0.40) {
+    targetAlpha = 1 - (t / 0.40);       // 1 → 0 за первые 40%
+  } else {
+    targetAlpha = 0;                    // полностью исчез
+  }
+}
+state.characterAlpha = lerp(state.characterAlpha, targetAlpha, dt * 4);
+
+  // wings
+  if (season === 'autumn') {
+    state.wingsAlpha = Math.min(1, state.wingsAlpha + dt * 0.6);
+    state.wingsFold  = Math.min(1, state.wingsFold + dt * 0.18);
+  } else {
+    state.wingsAlpha = Math.max(0, state.wingsAlpha - dt * 0.8);
+    state.wingsFold  = Math.max(0, state.wingsFold - dt * 0.4);
+  }
+
+  const fogTarget = (season === 'autumn') ? 0.85
+                : (season === 'winter') ? 1.1
+                : (season === 'final')  ? 0.3 : 0;
+
+// строка XI — туман гуще от mistDensity
+let finalFog = (LINES[state.line].object === 'mistPassing')
+  ? fogTarget + state.mistDensity * 0.5
+  : fogTarget;
+
+// строка XII — дождь даёт дополнительную дымку
+if (LINES[state.line].object === 'thresholdBrook') {
+  finalFog += state.brookRainDensity * 0.35;
+}
+
+state.fogAlpha = lerp(state.fogAlpha, finalFog, dt * 1.2);
+
+// строка XII — дождь даёт дополнительную дымку
+if (LINES[state.line].object === 'thresholdBrook') {
+  finalFog += state.brookRainDensity * 0.35;
+}
+
+state.fogAlpha = lerp(state.fogAlpha, finalFog, dt * 1.2);
+  const vigTarget = season === 'winter' ? 0.85
+                  : season === 'autumn' ? 0.6
+                  : season === 'final'  ? 0.15 : 0.55;
+  state.vignette = lerp(state.vignette, vigTarget, dt * 1.5);
+
+  // symbolic object
+  state.objectAlpha = lerp(state.objectAlpha, 1, dt * 0.6);
+  state.objectScale = lerp(state.objectScale, 1, dt * 0.8);
+  state.objectPulse += dt * 1.6;
+
+  // transition flash decay
+  state.transitionFlash = Math.max(0, state.transitionFlash - dt * 1.8);
+}
+
+/* ---------- MAIN LOOP ---------- */
+function loop(now) {
+  if (!state.lastTime) state.lastTime = now;
+  const dt = Math.min(0.05, (now - state.lastTime) / 1000);
+  state.lastTime = now;
+
+  if (state.playing) {
+    state.t += dt;
+    if (state.t >= LINES[state.line].dur) nextLine();
+  }
+
+  const line = LINES[state.line];
+  const palette = getCurrentPalette();
+
+  updateSeasonLogic(line.season, state.playing ? dt : 0);
+  updateParticles(state.playing ? dt : 0, line.season);
+  // ---------- FINAL LINES OVERLAY ----------
+if (line.season === 'final') {
+  const dur = LINES[state.line].dur;
+  const t   = state.t / dur;
+
+  // финальная строка появляется с 10%
+  if (t > 0.10) {
+    finalLinesEl.classList.add('show');
+  }
+
+  // подпись автора — только с 65% (когда рыцарь уже давно пропал)
+  if (t > 0.65) {
+    creditsEl.classList.add('show');
+  }
+} else {
+  finalLinesEl.classList.remove('show');
+  creditsEl.classList.remove('show');
+}
+
+   ctx.clearRect(0, 0, W, H);
+
+    ctx.save();
+  // при наезде на ручей — камера опускается вниз и слегка увеличивается
+  const brookDip = state.brookCameraDip;
+  const totalZoom = state.cameraZoom + brookDip * 0.35;
+  const totalOffY = state.cameraOffY + brookDip * H * -0.22;   // сдвиг вниз
+  ctx.translate(W * 0.5, H * 0.5);
+  ctx.scale(totalZoom, totalZoom);
+  ctx.translate(-W * 0.5 + state.cameraOffX, -H * 0.5 + totalOffY);
+
+  drawSky(palette);
+  drawSunAndMoon(palette, line.season);
+   drawSeasonalObject(line.season, line.object);
+  drawGround(palette, line.season);
+  drawFallenLeaves(palette, line.season); 
+
+  // ручей рисуем ПОВЕРХ земли
+  if (line.object === 'thresholdBrook') {
+    drawThresholdBrook();
+  }
+  drawSnowDrifts(palette, line.season);
+  if (line.season !== 'prologue' && line.season !== 'final') {
+  drawSeasonalTree(palette, line.season);
+  }
+  drawParticles();
+  drawFog(palette);
+  drawCharacter(palette);
+
+  ctx.restore();
+
+  drawVignette();
+  drawTransitionFlash();
+
+  requestAnimationFrame(loop);
+}
+
+const singleTrack = document.getElementById('track-main');
+const wolvesTrack = document.getElementById('track-wolves');
+const rainTrack = document.getElementById('track-rain');
+const nightingaleTrack = document.getElementById('track-nightingale');
+const seaTrack = document.getElementById('track-sea');
+const TRACKS = {
+  prologue: singleTrack,
+  spring:   singleTrack,
+  summer:   singleTrack,
+  autumn:   singleTrack,
+  winter:   singleTrack,
+  final:    singleTrack
+};
+let musicEnabled = false;
+let currentTrack = null;
+
+function playTrackFor(season) {
+  if (!musicEnabled) return;
+  if (!wolvesTrack) return;
+  wolvesTrack.volume = 0.55;
+  wolvesTrack.currentTime = 0;
+  wolvesTrack.play().catch(() => {});
+  if (!singleTrack) return;
+  if (!singleTrack.paused) return; // уже играет — не трогаем
+  singleTrack.volume = 0.7;
+  singleTrack.play().catch(() => {});
+}
+
+/* ---------- LINE DISPLAY ---------- */
+function showLine() {
+  const line = LINES[state.line];
+  if (line.season === 'final') {
+  // в финале не показываем обычную подпись — строки уже в центре
+  captionEl.classList.remove('show');
+  captionEl.textContent = '';
+} else {
+  captionEl.textContent = line.en;
+  captionEl.classList.remove('show');
+  void captionEl.offsetWidth;
+  captionEl.classList.add('show');
+}
+  // trigger reflow so transition replays
+  void captionEl.offsetWidth;
+  captionEl.classList.add('show');
+
+  // roman numerals
+  const roman = ['I','II','III','IV','V','VI','VII','VIII','IX','X','XI','XII','XIII','XIV'];
+  lineNumEl.textContent = `${roman[state.line]} / XIV`;
+
+  initSeason(line.season, line);
+  playTrackFor(line.season);
+    // вой волков — только на зимней строке
+  if (line.season === 'winter') {
+    playWolvesHowl();
+  } else {
+    if (wolvesTrack) {
+      wolvesTrack.pause();
+      wolvesTrack.currentTime = 0;
+    }
+  }
+    // звук дождя — только на строке с ручьём
+  if (line.object === 'thresholdBrook') {
+    playRain();
+  } else {
+    stopRain();
+  }
+    // пение соловья — только на первой весенней строке
+  if (line.object === 'blossom') {
+    playNightingale();
+  } else {
+    stopNightingale();
+  }
+    // море — только на строке с бухтой
+  if (seaTrack) {
+    if (state.playing && musicEnabled && LINES[state.line].object === 'cliffCove') {
+      seaTrack.play().catch(() => {});
+    } else {
+      seaTrack.pause();
+    }
+  }
+  
+  function playNightingale() {
+  if (!musicEnabled) return;
+  if (!nightingaleTrack) return;
+  nightingaleTrack.currentTime = 0;
+  nightingaleTrack.volume = 0;
+  nightingaleTrack.play().catch(() => {});
+  // плавное появление
+  const fade = setInterval(() => {
+    if (nightingaleTrack.volume < 0.6) {
+      nightingaleTrack.volume = Math.min(0.6, nightingaleTrack.volume + 0.04);
+    } else {
+      clearInterval(fade);
+    }
+  }, 80);
+}
+
+function stopNightingale() {
+  if (!nightingaleTrack) return;
+  const fade = setInterval(() => {
+    if (nightingaleTrack.volume > 0.03) {
+      nightingaleTrack.volume -= 0.05;
+    } else {
+      nightingaleTrack.volume = 0;
+      nightingaleTrack.pause();
+      clearInterval(fade);
+    }
+    function playSea() {
+  if (!musicEnabled) return;
+  if (!seaTrack) return;
+  seaTrack.volume = 0;
+  if (seaTrack.paused) {
+    seaTrack.currentTime = 0;
+    seaTrack.play().catch(() => {});
+  }
+  // плавное появление громкости
+  const fade = setInterval(() => {
+    if (seaTrack.volume < 0.85) {
+      seaTrack.volume = Math.min(0.85, seaTrack.volume + 0.03);
+    } else {
+      clearInterval(fade);
+    }
+  }, 70);
+}
+
+function stopSea() {
+  if (!seaTrack) return;
+  const fade = setInterval(() => {
+    if (seaTrack.volume > 0.03) {
+      seaTrack.volume -= 0.03;
+    } else {
+      seaTrack.volume = 0;
+      seaTrack.pause();
+      clearInterval(fade);
+    }
+  }, 70);
+}
+  }, 60);
+}
+  function playRain() {
+  if (!musicEnabled) return;
+  if (!rainTrack) return;
+  rainTrack.volume = 0;
+  if (rainTrack.paused) {
+    rainTrack.currentTime = 0;
+    rainTrack.play().catch(() => {});
+  }
+  // плавное появление громкости
+  const fade = setInterval(() => {
+    if (rainTrack.volume < 0.9) {
+      rainTrack.volume = Math.min(0.9, rainTrack.volume + 0.03);
+    } else {
+      clearInterval(fade);
+    }
+  }, 60);
+}
+
+function stopRain() {
+  if (!rainTrack) return;
+  // плавное затухание
+  const fade = setInterval(() => {
+    if (rainTrack.volume > 0.03) {
+      rainTrack.volume -= 0.03;
+    } else {
+      rainTrack.volume = 0;
+      rainTrack.pause();
+      clearInterval(fade);
+    }
+  }, 60);
+}
+}
+
+function nextLine() {
+  // Если это последняя строка — остановиться, ждать Reset
+  if (state.line >= LINES.length - 1) {
+    state.playing = false;
+    const btn = document.getElementById('btnPlay');
+    if (btn) btn.textContent = '▶ Play';
+    // останавливаем музыку
+    if (singleTrack) singleTrack.pause();
+    return;   // ← не переключаем дальше
+  }
+
+  state.line += 1;
+  state.t = 0;
+  showLine();
+}
+
+document.getElementById('btnPlay').addEventListener('click', (e) => {
+  state.playing = !state.playing;
+  e.target.textContent = state.playing ? '⏸ Pause' : '▶ Play';
+
+  if (state.playing && musicEnabled && currentTrack) currentTrack.play().catch(()=>{});
+  if (!state.playing && currentTrack) currentTrack.pause();
+
+  // дождь — только на строке с ручьём
+  if (rainTrack) {
+    if (state.playing && musicEnabled && LINES[state.line].object === 'thresholdBrook') {
+      rainTrack.play().catch(() => {});
+    } else {
+      rainTrack.pause();
+    }
+  }
+    // соловей — только на первой весенней строке
+  if (nightingaleTrack) {
+    if (state.playing && musicEnabled && LINES[state.line].object === 'blossom') {
+      nightingaleTrack.play().catch(() => {});
+    } else {
+      nightingaleTrack.pause();
+    }
+  }
+
+  // вой — только на зиме
+  if (wolvesTrack) {
+    if (state.playing && musicEnabled && LINES[state.line].season === 'winter') {
+      wolvesTrack.play().catch(() => {});
+    } else {
+      wolvesTrack.pause();
+    }
+  }
+});
+
+document.getElementById('btnNext').addEventListener('click', nextLine);
+
+document.getElementById('btnReset').addEventListener('click', () => {
+  state.line = 0;
+  state.t = 0;
+  state.fogAlpha = 0;
+  state.wingsFold = 0;
+  state.wingsAlpha = 0;
+  state.characterAlpha = 1;
+  state.characterLean = 0;
+  state.vignette = 0.55;
+  state.playing = false;
+  document.getElementById('btnPlay').textContent = '▶ Play';
+
+  // ---- сброс основной музыки ----
+  if (singleTrack) {
+    singleTrack.pause();
+    singleTrack.currentTime = 0;
+    singleTrack.volume = 0.7;
+  }
+
+  // ---- сброс воя волков ----
+  if (typeof wolvesTrack !== 'undefined' && wolvesTrack) {
+    wolvesTrack.pause();
+    wolvesTrack.currentTime = 0;
+  }
+    // ---- сброс звука дождя ----
+  if (typeof rainTrack !== 'undefined' && rainTrack) {
+    rainTrack.pause();
+    rainTrack.currentTime = 0;
+    rainTrack.volume = 0;
+  }
+    // ---- сброс соловья ----
+  if (typeof nightingaleTrack !== 'undefined' && nightingaleTrack) {
+    nightingaleTrack.pause();
+    nightingaleTrack.currentTime = 0;
+    nightingaleTrack.volume = 0;
+  }
+
+  // ---- сброс эха воя (если есть) ----
+  if (typeof wolvesEcho !== 'undefined' && wolvesEcho) {
+    wolvesEcho.pause();
+    wolvesEcho.currentTime = 0;
+  }
+
+  showLine();
+});
+
+document.getElementById('muteBtn').addEventListener('click', (e) => {
+  musicEnabled = !musicEnabled;
+
+  if (musicEnabled) {
+    e.target.textContent = '🔊 Sound';
+    // включаем музыку с текущей позиции
+    if (singleTrack) {
+      singleTrack.volume = 0.7;
+      singleTrack.play().catch(() => {});
+    }
+  } else {
+    e.target.textContent = '🔇 Muted';
+    // выключаем музыку
+    if (singleTrack) {
+      singleTrack.pause();
+    }
+  }
+  if (wolvesTrack) {
+    if (state.playing && musicEnabled && LINES[state.line].season === 'winter') {
+      wolvesTrack.play().catch(() => {});
+    } else {
+      wolvesTrack.pause();
+    }
+  }
+    if (rainTrack) {
+    if (state.playing && musicEnabled && LINES[state.line].object === 'thresholdBrook') {
+      rainTrack.play().catch(() => {});
+    } else {
+      rainTrack.pause();
+    }
+  }
+    if (nightingaleTrack) {
+    if (state.playing && musicEnabled && LINES[state.line].object === 'blossom') {
+      nightingaleTrack.play().catch(() => {});
+    } else {
+      nightingaleTrack.pause();
+    }
+  }
+    if (seaTrack) {
+    if (state.playing && musicEnabled && LINES[state.line].object === 'cliffCove') {
+      seaTrack.play().catch(() => {});
+    } else {
+      seaTrack.pause();
+    }
+  }
+});
+
+/* ---------- BOOT ---------- */
+showLine();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
